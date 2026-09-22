@@ -1,5 +1,13 @@
 import { JobsPanel } from "../../../../../components/JobsPanel";
-import { getSource, listSourceAssets } from "../../../../../lib/api";
+import {
+  TranscriptPanel,
+  VIDEO_PLAYER_ELEMENT_ID,
+} from "../../../../../components/TranscriptPanel";
+import {
+  getSource,
+  getTranscript,
+  listSourceAssets,
+} from "../../../../../lib/api";
 import { BROWSER_API_BASE_URL } from "../../../../../lib/browser-api";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +18,10 @@ export default async function SourceDetailPage({
   params: Promise<{ id: string; sourceId: string }>;
 }) {
   const { id, sourceId } = await params;
-  const [source, assets] = await Promise.all([
+  const [source, assets, transcript] = await Promise.all([
     getSource(id, sourceId),
     listSourceAssets(id, sourceId),
+    getTranscript(sourceId),
   ]);
 
   const videoAsset = assets.find(
@@ -49,12 +58,20 @@ export default async function SourceDetailPage({
         {videoAsset && (
           <div className="panel">
             <video
+              id={VIDEO_PLAYER_ELEMENT_ID}
               controls
               style={{ width: "100%", maxWidth: 640 }}
               src={`${BROWSER_API_BASE_URL}/projects/${id}/sources/${sourceId}/assets/${videoAsset.id}/content`}
             />
           </div>
         )}
+
+        <TranscriptPanel
+          projectId={id}
+          sourceId={sourceId}
+          sourceStatus={source.status}
+          transcript={transcript}
+        />
 
         <JobsPanel projectId={id} sourceId={sourceId} />
       </section>

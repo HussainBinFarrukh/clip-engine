@@ -42,7 +42,12 @@ export type MediaAsset = {
   created_at: string;
 };
 
-export type JobStage = "test_stage" | "upload_metadata" | "youtube_download";
+export type JobStage =
+  | "test_stage"
+  | "upload_metadata"
+  | "youtube_download"
+  | "audio_extract"
+  | "transcribe";
 export type JobState = "queued" | "processing" | "completed" | "failed";
 
 export type Job = {
@@ -58,6 +63,36 @@ export type Job = {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+};
+
+export type TranscriptWord = {
+  id: string;
+  word: string;
+  start_ms: number;
+  end_ms: number;
+  confidence: number | null;
+  word_index: number;
+};
+
+export type TranscriptSegment = {
+  id: string;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  speaker_label: string | null;
+  confidence: number | null;
+  words: TranscriptWord[];
+};
+
+export type Transcript = {
+  id: string;
+  source_video_id: string;
+  transcriber_name: string;
+  transcriber_model: string;
+  language: string | null;
+  duration_ms: number;
+  created_at: string;
+  segments: TranscriptSegment[];
 };
 
 function serverApiBaseUrl(): string {
@@ -104,4 +139,24 @@ export function listSourceAssets(
 
 export function listProjectJobs(projectId: string): Promise<Job[]> {
   return serverJson<Job[]>(`/projects/${projectId}/jobs`);
+}
+
+export async function getTranscript(
+  sourceId: string,
+): Promise<Transcript | null> {
+  const response = await fetch(
+    `${serverApiBaseUrl()}/sources/${sourceId}/transcript`,
+    {
+      cache: "no-store",
+    },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Request to fetch transcript failed with ${response.status}`,
+    );
+  }
+  return response.json() as Promise<Transcript>;
 }

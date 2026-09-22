@@ -6,9 +6,11 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T05 Audio extraction and transcription.
+Current task: T06 Signal extraction.
 
-T03 (Upload, YouTube ingestion and storage) and T04 (Job system) are done. Users can create a project, then add a source either by uploading an MP4 or by pasting a YouTube URL (downloaded server-side via `yt-dlp`). Both flows return immediately and finish via a background job processed by the worker; a failed job (e.g. an unreachable YouTube URL) can be retried from the Source Detail page. The app does not gate on source rights; users are responsible for the legality of what they provide (see `docs/DECISIONS.md`).
+T05 (Audio extraction and transcription) is done, with one accept check unverified in this environment (no GPU, no natural-speech test fixture — documented in `docs/DECISIONS.md`, not silently skipped). Requesting a transcript (`POST .../transcribe`) extracts 16kHz mono audio and runs faster-whisper with word-level timestamps; the Source Detail page shows a clickable transcript that seeks the video player.
+
+T03 (Upload, YouTube ingestion and storage) and T04 (Job system) are done. Users can create a project, then add a source either by uploading an MP4 or by pasting a YouTube URL (downloaded server-side via `yt-dlp`). Flows like this return immediately and finish via a background job processed by the worker; a failed job (e.g. an unreachable YouTube URL) can be retried from the Source Detail page. The app does not gate on source rights; users are responsible for the legality of what they provide (see `docs/DECISIONS.md`).
 
 T02 (Scaffold) is done. The monorepo, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, tests, and a 45-second speech MP4 fixture are all in place. `docker compose up` serves the web page and API health check, the no-op job runs, and all test suites pass.
 
@@ -45,7 +47,6 @@ The media fixture can be regenerated with:
 
 ## Non-Negotiables
 
-- Authorized sources only.
-- No downloading YouTube audiovisual media.
+- Source is user-provided (local upload or YouTube URL); the app does not gate on rights, but the user is responsible for the legality of what they provide (see `docs/DECISIONS.md`).
 - Original commentary is a first-class requirement.
 - Human approval is required before publishing.

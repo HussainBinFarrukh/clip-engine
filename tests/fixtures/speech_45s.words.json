@@ -1,0 +1,226 @@
+[
+    {
+        "word":  "Clip",
+        "start_ms":  137
+    },
+    {
+        "word":  "Engine",
+        "start_ms":  502
+    },
+    {
+        "word":  "turns",
+        "start_ms":  1005
+    },
+    {
+        "word":  "long",
+        "start_ms":  1494
+    },
+    {
+        "word":  "recordings",
+        "start_ms":  1873
+    },
+    {
+        "word":  "into",
+        "start_ms":  2658
+    },
+    {
+        "word":  "short",
+        "start_ms":  3051
+    },
+    {
+        "word":  "clips",
+        "start_ms":  3526
+    },
+    {
+        "word":  "This",
+        "start_ms":  5393
+    },
+    {
+        "word":  "authorized",
+        "start_ms":  5724
+    },
+    {
+        "word":  "sample",
+        "start_ms":  6564
+    },
+    {
+        "word":  "video",
+        "start_ms":  7191
+    },
+    {
+        "word":  "contains",
+        "start_ms":  7708
+    },
+    {
+        "word":  "spoken",
+        "start_ms":  8390
+    },
+    {
+        "word":  "words",
+        "start_ms":  9017
+    },
+    {
+        "word":  "for",
+        "start_ms":  9437
+    },
+    {
+        "word":  "pipeline",
+        "start_ms":  9671
+    },
+    {
+        "word":  "testing",
+        "start_ms":  10477
+    },
+    {
+        "word":  "Each",
+        "start_ms":  12407
+    },
+    {
+        "word":  "sentence",
+        "start_ms":  12689
+    },
+    {
+        "word":  "here",
+        "start_ms":  13295
+    },
+    {
+        "word":  "is",
+        "start_ms":  13592
+    },
+    {
+        "word":  "different",
+        "start_ms":  13840
+    },
+    {
+        "word":  "from",
+        "start_ms":  14398
+    },
+    {
+        "word":  "the",
+        "start_ms":  14680
+    },
+    {
+        "word":  "last",
+        "start_ms":  14804
+    },
+    {
+        "word":  "one",
+        "start_ms":  15259
+    },
+    {
+        "word":  "The",
+        "start_ms":  16912
+    },
+    {
+        "word":  "transcriber",
+        "start_ms":  17078
+    },
+    {
+        "word":  "should",
+        "start_ms":  18077
+    },
+    {
+        "word":  "find",
+        "start_ms":  18380
+    },
+    {
+        "word":  "word",
+        "start_ms":  18855
+    },
+    {
+        "word":  "boundaries",
+        "start_ms":  19193
+    },
+    {
+        "word":  "and",
+        "start_ms":  19964
+    },
+    {
+        "word":  "timestamps",
+        "start_ms":  20219
+    },
+    {
+        "word":  "accurately",
+        "start_ms":  21218
+    },
+    {
+        "word":  "Pipeline",
+        "start_ms":  23361
+    },
+    {
+        "word":  "smoke",
+        "start_ms":  24208
+    },
+    {
+        "word":  "tests",
+        "start_ms":  24718
+    },
+    {
+        "word":  "rely",
+        "start_ms":  25214
+    },
+    {
+        "word":  "on",
+        "start_ms":  25682
+    },
+    {
+        "word":  "this",
+        "start_ms":  25903
+    },
+    {
+        "word":  "fixture",
+        "start_ms":  26158
+    },
+    {
+        "word":  "running",
+        "start_ms":  26791
+    },
+    {
+        "word":  "end",
+        "start_ms":  27267
+    },
+    {
+        "word":  "to",
+        "start_ms":  27549
+    },
+    {
+        "word":  "end",
+        "start_ms":  27735
+    },
+    {
+        "word":  "Audio",
+        "start_ms":  29396
+    },
+    {
+        "word":  "extraction",
+        "start_ms":  29919
+    },
+    {
+        "word":  "converts",
+        "start_ms":  30849
+    },
+    {
+        "word":  "the",
+        "start_ms":  31511
+    },
+    {
+        "word":  "original",
+        "start_ms":  31697
+    },
+    {
+        "word":  "track",
+        "start_ms":  32296
+    },
+    {
+        "word":  "to",
+        "start_ms":  32764
+    },
+    {
+        "word":  "sixteen",
+        "start_ms":  32937
+    },
+    {
+        "word":  "kilohertz",
+        "start_ms":  33660
+    }
+]

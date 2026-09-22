@@ -13,6 +13,8 @@ class JobStage(str, enum.Enum):
     TEST_STAGE = "test_stage"
     UPLOAD_METADATA = "upload_metadata"
     YOUTUBE_DOWNLOAD = "youtube_download"
+    AUDIO_EXTRACT = "audio_extract"
+    TRANSCRIBE = "transcribe"
 
 
 class JobState(str, enum.Enum):

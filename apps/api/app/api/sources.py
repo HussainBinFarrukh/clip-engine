@@ -14,13 +14,22 @@ from app.models.job import JobStage
 from app.models.media_asset import AssetKind, MediaAsset
 from app.models.project import Project
 from app.models.source_video import SourceKind, SourceVideo, SourceVideoStatus
+from app.models.transcript import Transcript
 from app.schemas.media_asset import MediaAssetRead
 from app.schemas.source_video import SourceVideoCreate, SourceVideoRead
+from app.schemas.transcript import TranscriptRead
 from app.services.job_queue import dispatch_job
 from app.services.jobs import enqueue_job
 from app.services.storage import StorageProvider, get_storage_provider
 
 router = APIRouter(prefix="/projects/{project_id}/sources", tags=["sources"])
+transcript_router = APIRouter(prefix="/sources", tags=["transcript"])
+
+_TRANSCRIBABLE_STATUSES = {
+    SourceVideoStatus.UPLOADED,
+    SourceVideoStatus.READY,
+    SourceVideoStatus.FAILED,
+}
 
 _ALLOWED_UPLOAD_CONTENT_TYPES = {"video/mp4"}
 _ALLOWED_UPLOAD_EXTENSIONS = {".mp4"}
@@ -210,3 +219,44 @@ def upload_source_video(
     dispatch_job(job.id)
 
     return response
+
+
+@router.post("/{source_video_id}/transcribe", response_model=SourceVideoRead)
+def transcribe_source_video(
+    project_id: uuid.UUID,
+    source_video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> SourceVideoRead:
+    source_video = _get_source_or_404(db, project_id, source_video_id)
+
+    if source_video.status not in _TRANSCRIBABLE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transcribe a source video with status '{source_video.status.value}'",
+        )
+
+    source_video.status = SourceVideoStatus.PROCESSING
+    source_video.error_message = None
+    db.commit()
+    db.refresh(source_video)
+
+    # See the comment in create_source_video: snapshot before dispatching.
+    response = SourceVideoRead.model_validate(source_video)
+
+    # audio_extract auto-chains into transcribe on success (app.services.jobs).
+    job = enqueue_job(db, stage=JobStage.AUDIO_EXTRACT, source_video_id=source_video.id)
+    dispatch_job(job.id)
+
+    return response
+
+
+@transcript_router.get("/{source_video_id}/transcript", response_model=TranscriptRead)
+def get_source_transcript(source_video_id: uuid.UUID, db: Session = Depends(get_db)) -> Transcript:
+    transcript = db.scalars(
+        select(Transcript)
+        .where(Transcript.source_video_id == source_video_id)
+        .order_by(Transcript.created_at.desc())
+    ).first()
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="No transcript for this source video")
+    return transcript

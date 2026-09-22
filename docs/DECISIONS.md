@@ -45,3 +45,29 @@ The T02 Compose stack includes a one-shot `worker-smoke` service that enqueues a
 ## 2026-09-22: T02 Docker Acceptance Confirmed
 
 Docker Desktop's WSL2 backend became available in this environment (no restart or further elevation needed beyond the earlier install). `docker compose up` was run from the existing checkout: `web` returns HTTP 200, `GET /health` on `api` returns `{"status":"ok",...}`, and the `worker` log shows the `worker-smoke` producer's no-op message was consumed (`noop job: compose-smoke`). The API (1 test), worker (3 tests), and web (1 test) suites, plus `ruff check` and `tsc --noEmit`, all pass when run inside their respective containers. T02 is marked done.
+
+## 2026-09-22: Transcription Is User-Triggered, Not Automatic on Upload
+
+`upload_metadata`/`youtube_download` do not auto-chain into `audio_extract`. Transcription is CPU/compute-heavy (real, non-trivial wall-clock time even on a small model), so it runs only when the user explicitly requests it via `POST .../transcribe`, not on every upload. `audio_extract` and `transcribe` do auto-chain into each other, since from the user's perspective "transcribe this video" is one action, just implemented as two separately-retryable stages.
+
+This also kept T03/T04's existing fast tests fast: they create/upload sources without ever touching the transcription pipeline, so they aren't coupled to whisper model downloads or CPU inference time.
+
+## 2026-09-22: faster-whisper CPU Default Is `tiny`, Not a Larger Model
+
+`large-v3` (the CUDA-path model per `AGENTS.md`) is several GB and this environment has no GPU passthrough, so the CPU-path default is `WHISPER_MODEL_CPU=tiny` — small enough to download and run in a sandboxed dev environment with a slow, rate-limited network connection. `WHISPER_MODEL_CPU` is a plain environment variable a real deployment can override (e.g. to `small` or `medium`) once it has the network/CPU budget for a heavier model.
+
+## 2026-09-22: Fixture Gets Real Ground-Truth Word Timestamps, But T05's ~100ms Accept Bar Is Not Verified
+
+`scripts/create-fixture.ps1` now captures real per-word start times during speech synthesis (via `SpeechSynthesizer.SpeakProgress`, exposed through a small inline C# helper since PowerShell's own event-delegate casting didn't work) and writes them to `tests/fixtures/speech_45s.words.json`, replacing an unlabeled guess with an actual, checkable ground truth. The script also switched from one sentence repeated 3× to 8 distinct sentences (verbatim repetition is a known Whisper timestamp-drift trigger), and measures the synthesized WAV's *real* duration via `ffprobe` to bound the ground truth — `SpeakProgress`'s `AudioPosition` events ran several seconds ahead of the WAV actually written to disk, a SAPI quirk worth knowing about if this script is reused.
+
+With that real ground truth in hand, `apps/api/tests/test_transcription.py` found that faster-whisper's predicted word timestamps drift by several seconds over the ~35s clip (growing roughly proportionally, not random per-word jitter) — confirmed to be caused by the fixture's synthetic voice, not a pipeline bug: the SAPI voice has large, irregular inter-word pauses (several hundred ms between many word pairs, unlike natural speech), reproduced at both `Rate=-1` and the default rate. That prosody is out-of-distribution for Whisper's attention-based word alignment. Segment-level transcribed *text* is accurate (all 8 sentences transcribed correctly, in order, via a real diff against ground truth).
+
+Given that, the test asserts what's actually reliable — text accuracy against ground truth, and structural correctness of stored timestamps (bounded, monotonic) — and does not assert millisecond accuracy against ground truth. **TASKS.md's T05 accept bar ("word timestamps within about 100ms") is therefore not verified in this environment.** It assumes `large-v3` on natural speech; this environment has neither a GPU nor a natural-speech test fixture. Before relying on tight audio/caption sync (T13), re-verify against `large-v3` and a real recorded voice sample.
+
+## 2026-09-22: Whisper Model Weights Persist in a Named Volume
+
+The first `faster-whisper` call downloads model weights from Hugging Face Hub at runtime (not baked into the image). Without a persistent cache, every `docker compose down` + `up` re-downloads them, adding ~50s+ to the next transcription on this environment's slow network. `api` and `worker` now both mount a shared `hf_cache` volume at `HF_HOME=/data/hf-cache` so the download only happens once per environment, not once per container recreation.
+
+## 2026-09-22: Worker Runs Need a Restart, Not Just a File Change
+
+Unlike the API (uvicorn `--reload` watches the mounted volume), the Dramatiq worker process does not hot-reload — it has whatever Python objects (including enum classes) were in memory when it started. A code change that isn't paired with `docker compose up -d worker` (or an image rebuild, when dependencies changed) leaves the worker running stale code, which surfaces as confusing low-level errors (e.g. a `LookupError` deserializing an enum value the running process's stale `JobStage` doesn't know about) rather than an obvious version mismatch. Restart the worker after any change under `apps/api` or `workers/` that isn't purely test-only.

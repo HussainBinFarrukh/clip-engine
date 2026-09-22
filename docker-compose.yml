@@ -33,6 +33,7 @@ services:
       DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
       REDIS_URL: redis://redis:6379/0
       STORAGE_ROOT: /data/storage
+      HF_HOME: /data/hf-cache
     ports:
       - "8000:8000"
     depends_on:
@@ -44,6 +45,7 @@ services:
       - ./apps/api:/app/apps/api
       - ./tests/fixtures:/app/tests/fixtures:ro
       - storage_data:/data/storage
+      - hf_cache:/data/hf-cache
 
   worker:
     build:
@@ -53,6 +55,7 @@ services:
       DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
       REDIS_URL: redis://redis:6379/0
       STORAGE_ROOT: /data/storage
+      HF_HOME: /data/hf-cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +65,7 @@ services:
       - ./workers:/app/workers
       - ./apps/api:/app/apps/api:ro
       - storage_data:/data/storage
+      - hf_cache:/data/hf-cache
     command: ["dramatiq", "clip_engine_worker.noop", "clip_engine_worker.jobs"]
 
   worker-smoke:
@@ -99,3 +103,4 @@ services:
 volumes:
   postgres_data:
   storage_data:
+  hf_cache:

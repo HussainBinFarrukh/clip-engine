@@ -94,7 +94,10 @@ def client(
     def _sync_dispatch(job_id: uuid.UUID) -> None:
         job_db = TestSessionLocal()
         try:
-            execute_job(job_db, job_id)
+            # Pass itself as the dispatcher so an auto-chained next stage
+            # (e.g. audio_extract -> transcribe) also runs synchronously,
+            # rather than falling back to a real Redis dispatch mid-chain.
+            execute_job(job_db, job_id, dispatch=_sync_dispatch)
         finally:
             job_db.close()
 

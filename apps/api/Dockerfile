@@ -10,7 +10,7 @@ RUN apt-get update \
 WORKDIR /app/apps/api
 
 COPY apps/api/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 COPY apps/api ./
 

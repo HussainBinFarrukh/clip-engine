@@ -75,7 +75,7 @@ No rights fields. The app does not track or validate source rights — see `docs
 
 - `id`: UUID primary key
 - `source_video_id`: nullable foreign key to `source_videos`
-- `stage`: enum: `test_stage`, `youtube_download`, `upload_metadata`; later phases add `audio_extract`, `transcribe`
+- `stage`: enum: `test_stage`, `youtube_download`, `upload_metadata`, `audio_extract`, `transcribe`
 - `state`: enum: `queued`, `processing`, `completed`, `failed`
 - `progress`: integer 0-100
 - `attempts`: integer
@@ -152,9 +152,9 @@ Phase 1 adapter: local disk. API responses never expose filesystem paths.
 
 ### Transcriber
 
-- `transcribe(audio_asset, options) -> TranscriptResult`
+- `transcribe(audio_path) -> TranscriptResult`
 
-Phase 1 adapter: faster-whisper with word timestamps enabled. Use large-v3 on CUDA when available and a smaller CPU model otherwise.
+Phase 1 adapter: `FasterWhisperTranscriber`, word timestamps always on. Uses `large-v3` on CUDA when available (`WHISPER_MODEL_CUDA`) and a smaller CPU model otherwise (`WHISPER_MODEL_CPU`, default `tiny`); `WHISPER_DEVICE` overrides autodetection. See `docs/DECISIONS.md` for why the CPU default is `tiny` rather than a more accurate model, and what that means for timestamp precision.
 
 ### LLMProvider
 
@@ -196,8 +196,16 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 - Accepts MP4 fixture and later configured formats.
 - Validates format and size only. No rights fields are collected or checked.
 - Stores an original `MediaAsset` with a generated asset ID.
-- Enqueues the `upload_metadata` job stage (ffprobe); later phases add audio/transcription stages.
+- Enqueues the `upload_metadata` job stage (ffprobe).
 - Returns immediately, before the job runs.
+
+### Transcription
+
+- `POST /projects/{project_id}/sources/{source_video_id}/transcribe`
+- Enqueues `audio_extract`, which auto-chains into `transcribe` on success (see "Job Chaining" below). Allowed once the source is `uploaded`, `ready` (re-transcribe) or `failed` (retry); not while a source is still `draft`, `downloading` or `processing`.
+- Returns immediately, before either job runs.
+- `GET /sources/{source_video_id}/transcript`
+- Returns the latest transcript's segments and words with timestamps. 404 if none exists yet.
 
 ### Jobs
 
@@ -205,10 +213,9 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 - `GET /projects/{project_id}/jobs`
 - `POST /jobs/{job_id}/retry`
 
-### Transcript
+#### Job chaining
 
-- `GET /sources/{source_video_id}/transcript`
-- Returns transcript segments and words with timestamps.
+Most stages are triggered explicitly (upload → `upload_metadata`, a YouTube URL → `youtube_download`, the transcribe endpoint → `audio_extract`). One pair auto-chains: `audio_extract` enqueues `transcribe` itself on success, because they're really one user-facing action ("transcribe this video") split into two idempotent, separately-retryable stages. Upload/download do *not* auto-chain into `audio_extract` — transcription is compute-heavy, so it only runs when explicitly requested, not on every upload (see `docs/DECISIONS.md`).
 
 ## Phase 1 UI Pages
 

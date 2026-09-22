@@ -188,3 +188,28 @@ a {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.transcript {
+  display: grid;
+  gap: 12px;
+}
+
+.transcript-segment {
+  line-height: 1.9;
+  margin: 0;
+}
+
+.transcript-word {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 1px 2px;
+}
+
+.transcript-word:hover {
+  background: var(--panel);
+  border-radius: 4px;
+  color: var(--accent);
+}

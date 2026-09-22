@@ -4,17 +4,34 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.job import Job, JobStage, JobState
-from app.models.media_asset import MediaAsset
+from app.models.media_asset import AssetKind, MediaAsset
 from app.models.source_video import SourceVideo, SourceVideoStatus
+from app.models.transcript import Transcript, TranscriptSegment, TranscriptWord
+from app.services.ffmpeg import extract_audio_16k_mono_wav
 from app.services.ffprobe import probe_video
 from app.services.ingest import store_original_video
+from app.services.job_queue import dispatch_job as _default_dispatch_job
 from app.services.storage import get_storage_provider
+from app.services.transcriber import TranscriptResult, get_transcriber
 from app.services.youtube import get_youtube_provider
 
 StageHandler = Callable[[Session, Job], dict]
+Dispatcher = Callable[[uuid.UUID], None]
+
+# A stage that, on success, automatically enqueues the next one. Kept
+# deliberately narrow: upload_metadata/youtube_download do NOT auto-chain
+# into audio_extract — transcription is compute-heavy, so the user
+# explicitly starts it (POST .../transcribe) rather than it firing on
+# every upload. audio_extract -> transcribe are a tightly coupled pair,
+# so once transcription is requested the whole pair runs without a
+# second click.
+_NEXT_STAGE: dict[JobStage, JobStage] = {
+    JobStage.AUDIO_EXTRACT: JobStage.TRANSCRIBE,
+}
 
 
 class TestStageFailure(RuntimeError):
@@ -96,14 +113,133 @@ def _run_youtube_download_stage(db: Session, job: Job) -> dict:
     return {"asset_id": str(asset.id)}
 
 
+def _latest_asset(db: Session, source_video_id: uuid.UUID, asset_kind: AssetKind) -> MediaAsset:
+    asset = db.scalars(
+        select(MediaAsset)
+        .where(
+            MediaAsset.source_video_id == source_video_id,
+            MediaAsset.asset_kind == asset_kind,
+        )
+        .order_by(MediaAsset.created_at.desc())
+        .limit(1)
+    ).first()
+    if asset is None:
+        raise ValueError(f"no {asset_kind.value} asset found for source video {source_video_id}")
+    return asset
+
+
+def _run_audio_extract_stage(db: Session, job: Job) -> dict:
+    source_video = db.get(SourceVideo, job.source_video_id)
+    if source_video is None:
+        raise ValueError("source video not found")
+
+    storage = get_storage_provider()
+    original = _latest_asset(db, source_video.id, AssetKind.ORIGINAL_VIDEO)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        wav_path = Path(tmp_dir) / "audio.wav"
+        extract_audio_16k_mono_wav(storage.resolve_path(original.storage_key), wav_path)
+
+        asset_id = uuid.uuid4()
+        stored = storage.put_file(str(asset_id), wav_path, suffix=".wav")
+
+    asset = MediaAsset(
+        id=asset_id,
+        source_video_id=source_video.id,
+        asset_kind=AssetKind.EXTRACTED_AUDIO,
+        storage_key=stored.storage_key,
+        mime_type="audio/wav",
+        byte_size=stored.byte_size,
+        checksum_sha256=stored.checksum_sha256,
+        metadata_json={"sample_rate_hz": 16000, "channels": 1},
+    )
+    db.add(asset)
+
+    return {"asset_id": str(asset_id)}
+
+
+def _save_transcript(
+    db: Session, source_video_id: uuid.UUID, transcriber_name: str, result: TranscriptResult
+) -> Transcript:
+    # Delete-then-insert keeps re-running this stage idempotent: no
+    # duplicate transcripts accumulate across retries or re-transcription.
+    existing = db.scalars(
+        select(Transcript).where(Transcript.source_video_id == source_video_id)
+    ).all()
+    for old in existing:
+        db.delete(old)
+    db.flush()
+
+    transcript = Transcript(
+        source_video_id=source_video_id,
+        transcriber_name=transcriber_name,
+        transcriber_model=result.model_name,
+        language=result.language,
+        duration_ms=result.duration_ms,
+    )
+    db.add(transcript)
+    db.flush()
+
+    for segment in result.segments:
+        segment_row = TranscriptSegment(
+            transcript_id=transcript.id,
+            start_ms=segment.start_ms,
+            end_ms=segment.end_ms,
+            text=segment.text,
+            confidence=segment.confidence,
+        )
+        db.add(segment_row)
+        db.flush()
+
+        for index, word in enumerate(segment.words):
+            db.add(
+                TranscriptWord(
+                    segment_id=segment_row.id,
+                    start_ms=word.start_ms,
+                    end_ms=word.end_ms,
+                    word=word.word,
+                    confidence=word.confidence,
+                    word_index=index,
+                )
+            )
+
+    return transcript
+
+
+def _run_transcribe_stage(db: Session, job: Job) -> dict:
+    source_video = db.get(SourceVideo, job.source_video_id)
+    if source_video is None:
+        raise ValueError("source video not found")
+
+    storage = get_storage_provider()
+    audio_asset = _latest_asset(db, source_video.id, AssetKind.EXTRACTED_AUDIO)
+
+    transcriber = get_transcriber()
+    result = transcriber.transcribe(storage.resolve_path(audio_asset.storage_key))
+
+    transcript = _save_transcript(db, source_video.id, transcriber.name, result)
+    source_video.status = SourceVideoStatus.READY
+    source_video.error_message = None
+
+    word_count = sum(len(segment.words) for segment in result.segments)
+    return {
+        "transcript_id": str(transcript.id),
+        "language": result.language,
+        "segment_count": len(result.segments),
+        "word_count": word_count,
+    }
+
+
 _STAGE_HANDLERS: dict[JobStage, StageHandler] = {
     JobStage.TEST_STAGE: _run_test_stage,
     JobStage.UPLOAD_METADATA: _run_upload_metadata_stage,
     JobStage.YOUTUBE_DOWNLOAD: _run_youtube_download_stage,
+    JobStage.AUDIO_EXTRACT: _run_audio_extract_stage,
+    JobStage.TRANSCRIBE: _run_transcribe_stage,
 }
 
 
-def execute_job(db: Session, job_id: uuid.UUID) -> Job:
+def execute_job(db: Session, job_id: uuid.UUID, dispatch: Dispatcher | None = None) -> Job:
     """Run one attempt of a job's stage.
 
     Persists the "processing" state (and the incremented attempt count)
@@ -147,6 +283,20 @@ def execute_job(db: Session, job_id: uuid.UUID) -> Job:
     job.progress = 100
     job.state = JobState.COMPLETED
     job.completed_at = datetime.now(UTC)
-    db.commit()
+
+    next_stage = _NEXT_STAGE.get(job.stage)
+    next_job_id: uuid.UUID | None = None
+    if next_stage is not None:
+        # enqueue_job commits, which also persists this job's completed
+        # state in the same transaction — no separate commit needed.
+        next_job = enqueue_job(db, stage=next_stage, source_video_id=job.source_video_id)
+        next_job_id = next_job.id
+    else:
+        db.commit()
+
     db.refresh(job)
+
+    if next_job_id is not None:
+        (dispatch or _default_dispatch_job)(next_job_id)
+
     return job
