@@ -113,15 +113,17 @@ The chart lives on the Source Detail page, not the top-level Project page — a 
 
 **Out of scope:** Scoring.
 
-### T07: Candidate windows · status: todo
+### T07: Candidate windows · status: done
 **Build:**
 - Window generation per clip preset from `AGENTS.md`.
 - Start and end snapped to sentence boundaries, never starting or ending mid-sentence.
 - Overlap between windows allowed.
 
 **Accept:**
-- Each preset yields windows within its duration bounds.
-- A test confirms no window cuts a sentence.
+- Each preset yields windows within its duration bounds. Verified for all four presets (a synthetic multi-minute sentence list, since the real fixture is too short for `shorts_long`/`tiktok_rewards`/`longform`).
+- A test confirms no window cuts a sentence. Verified two ways: structurally (every window boundary matches a sentence boundary) and, against the real fixture's transcript, at the word level (no `TranscriptWord` straddles a window boundary).
+
+Pure library code (`app/services/candidate_windows.py`), no DB table or endpoint — persistence is T09's `ClipCandidate`. See `docs/DECISIONS.md`.
 
 **Out of scope:** LLM calls.
 

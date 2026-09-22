@@ -6,15 +6,9 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T07 Candidate windows.
+Current task: T08 LLM provider. Phase 1 (ingest, transcribe) and T06-T07 of Phase 2 are done — see `docs/ROADMAP.md` for the full per-task status and `docs/DECISIONS.md` for the reasoning behind every deviation from `TASKS.md` (none silent).
 
-T06 (Signal extraction) is done. Once a source has a transcript, `POST .../extract-signals` computes loudness/RMS, scene changes (PySceneDetect), pauses, and speech rate, shown as a timeline chart on the Source Detail page (not the top-level Project page TASKS.md names — a per-source chart didn't fit there without a source picker; documented in `docs/DECISIONS.md`).
-
-T05 (Audio extraction and transcription) is done, with one accept check unverified in this environment (no GPU, no natural-speech test fixture — documented in `docs/DECISIONS.md`, not silently skipped). Requesting a transcript (`POST .../transcribe`) extracts 16kHz mono audio and runs faster-whisper with word-level timestamps; the Source Detail page shows a clickable transcript that seeks the video player.
-
-T03 (Upload, YouTube ingestion and storage) and T04 (Job system) are done. Users can create a project, then add a source either by uploading an MP4 or by pasting a YouTube URL (downloaded server-side via `yt-dlp`). Flows like this return immediately and finish via a background job processed by the worker; a failed job (e.g. an unreachable YouTube URL) can be retried from the Source Detail page. The app does not gate on source rights; users are responsible for the legality of what they provide (see `docs/DECISIONS.md`).
-
-T02 (Scaffold) is done. The monorepo, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, tests, and a 45-second speech MP4 fixture are all in place. `docker compose up` serves the web page and API health check, the no-op job runs, and all test suites pass.
+Pipeline so far: create a project → add a source (local MP4 upload, or a YouTube URL downloaded server-side via `yt-dlp`; the app does not gate on source rights — see `docs/DECISIONS.md`) → `POST .../transcribe` (faster-whisper, word-level timestamps; one accept check unverified in this sandboxed environment, documented not skipped) → `POST .../extract-signals` (loudness, scene changes, pauses, speech rate, charted on Source Detail) → `app/services/candidate_windows.py` generates sentence-snapped candidate windows per clip preset (pure library code, no endpoint yet — T09 adds scoring and persistence). Every stage after upload runs as an async job the request returns before, processed by the worker; failed jobs are retryable from Source Detail.
 
 ## Key Docs
 

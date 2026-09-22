@@ -255,6 +255,10 @@ Most stages are triggered explicitly (upload → `upload_metadata`, a YouTube UR
 - Transcript panel with clickable timestamps that seek the player.
 - Signals timeline: loudness, speech rate, scene changes, and pauses over time (small multiples sharing a time axis), with an "Extract signals" trigger once the source is `ready`. TASKS.md names the "project page" for this; it lives on Source Detail instead because a signal series is per-source, and this page already has the player/transcript it's most useful alongside — see `docs/DECISIONS.md`.
 
+## Candidate Windows (Phase 2)
+
+`app/services/clip_presets.py` mirrors the "Clip length presets" table in `AGENTS.md` (`shorts_campaign`, `shorts_long`, `tiktok_rewards`, `longform` — min/max duration and aspect ratio). `app/services/candidate_windows.py` generates every window, per preset, whose start and end land exactly on a transcript sentence (segment) boundary and whose duration fits the preset's bounds; overlapping windows from different start sentences are kept, not deduplicated. This is pure, tested library code with no DB table or endpoint yet — see `docs/DECISIONS.md` for why persistence waits for T09 (`ClipCandidate`, which stores the scored, feature-carrying version of a window).
+
 ## Local Development Setup
 
 Phase 1 local development target:
