@@ -42,6 +42,24 @@ export type MediaAsset = {
   created_at: string;
 };
 
+export type JobStage = "test_stage" | "upload_metadata" | "youtube_download";
+export type JobState = "queued" | "processing" | "completed" | "failed";
+
+export type Job = {
+  id: string;
+  source_video_id: string | null;
+  stage: JobStage;
+  state: JobState;
+  progress: number;
+  attempts: number;
+  error_code: string | null;
+  error_message: string | null;
+  output_json: Record<string, unknown>;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
 function serverApiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:8000";
 }
@@ -82,4 +100,8 @@ export function listSourceAssets(
   return serverJson<MediaAsset[]>(
     `/projects/${projectId}/sources/${sourceId}/assets`,
   );
+}
+
+export function listProjectJobs(projectId: string): Promise<Job[]> {
+  return serverJson<Job[]>(`/projects/${projectId}/jobs`);
 }

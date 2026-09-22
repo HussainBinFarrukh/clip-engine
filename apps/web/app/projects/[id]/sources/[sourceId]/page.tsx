@@ -1,3 +1,4 @@
+import { JobsPanel } from "../../../../../components/JobsPanel";
 import { getSource, listSourceAssets } from "../../../../../lib/api";
 import { BROWSER_API_BASE_URL } from "../../../../../lib/browser-api";
 
@@ -54,6 +55,8 @@ export default async function SourceDetailPage({
             />
           </div>
         )}
+
+        <JobsPanel projectId={id} sourceId={sourceId} />
       </section>
     </main>
   );

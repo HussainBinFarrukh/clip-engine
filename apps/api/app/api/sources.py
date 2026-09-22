@@ -3,21 +3,22 @@ import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.session import SessionLocal, get_db
-from app.models.media_asset import MediaAsset
+from app.db.session import get_db
+from app.models.job import JobStage
+from app.models.media_asset import AssetKind, MediaAsset
 from app.models.project import Project
 from app.models.source_video import SourceKind, SourceVideo, SourceVideoStatus
 from app.schemas.media_asset import MediaAssetRead
 from app.schemas.source_video import SourceVideoCreate, SourceVideoRead
-from app.services.ingest import store_original_video
+from app.services.job_queue import dispatch_job
+from app.services.jobs import enqueue_job
 from app.services.storage import StorageProvider, get_storage_provider
-from app.services.youtube import YouTubeDownloadError, get_youtube_provider
 
 router = APIRouter(prefix="/projects/{project_id}/sources", tags=["sources"])
 
@@ -41,39 +42,12 @@ def _get_source_or_404(
     return source_video
 
 
-def _download_youtube_source(source_video_id: uuid.UUID, url: str) -> None:
-    db = SessionLocal()
-    storage = get_storage_provider()
-    provider = get_youtube_provider()
-    try:
-        source_video = db.get(SourceVideo, source_video_id)
-        if source_video is None:
-            return
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                downloaded = provider.fetch(url, Path(tmp_dir))
-            except YouTubeDownloadError as exc:
-                source_video.status = SourceVideoStatus.FAILED
-                source_video.error_message = str(exc)[:1000]
-                db.commit()
-                return
-
-            if not source_video.title:
-                source_video.title = downloaded.title
-            store_original_video(db, source_video, storage, downloaded.path, mime_type="video/mp4")
-            db.commit()
-    finally:
-        db.close()
-
-
 @router.post("", response_model=SourceVideoRead, status_code=201)
 def create_source_video(
     project_id: uuid.UUID,
     payload: SourceVideoCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-) -> SourceVideo:
+) -> SourceVideoRead:
     _get_project_or_404(db, project_id)
 
     source_video = SourceVideo(
@@ -91,12 +65,24 @@ def create_source_video(
     db.commit()
     db.refresh(source_video)
 
-    if payload.source_kind == SourceKind.YOUTUBE_URL:
-        background_tasks.add_task(
-            _download_youtube_source, source_video.id, payload.source_reference
-        )
+    # Snapshot the response before dispatching: dispatch_job hands off to a
+    # separate worker process in production, but in tests it may run the
+    # job synchronously, which would otherwise expire and silently refresh
+    # this object to its post-job state before FastAPI serializes it.
+    response = SourceVideoRead.model_validate(source_video)
 
-    return source_video
+    if payload.source_kind == SourceKind.YOUTUBE_URL:
+        # Enqueued and returned immediately; the download itself runs in the
+        # worker process, not within this request (see docs/DECISIONS.md).
+        job = enqueue_job(
+            db,
+            stage=JobStage.YOUTUBE_DOWNLOAD,
+            source_video_id=source_video.id,
+            input_json={"url": payload.source_reference},
+        )
+        dispatch_job(job.id)
+
+    return response
 
 
 @router.get("", response_model=list[SourceVideoRead])
@@ -163,7 +149,7 @@ def upload_source_video(
     file: UploadFile,
     db: Session = Depends(get_db),
     storage: StorageProvider = Depends(get_storage_provider),
-) -> SourceVideo:
+) -> SourceVideoRead:
     source_video = _get_source_or_404(db, project_id, source_video_id)
 
     if source_video.source_kind != SourceKind.LOCAL_UPLOAD:
@@ -188,11 +174,39 @@ def upload_source_video(
                 raise HTTPException(status_code=413, detail="Upload exceeds the size limit")
             tmp_file.write(chunk)
 
+    asset_id = uuid.uuid4()
     try:
-        store_original_video(db, source_video, storage, tmp_path, mime_type=file.content_type)
+        stored = storage.put_file(str(asset_id), tmp_path, suffix=".mp4")
     finally:
         tmp_path.unlink(missing_ok=True)
 
+    asset = MediaAsset(
+        id=asset_id,
+        source_video_id=source_video.id,
+        asset_kind=AssetKind.ORIGINAL_VIDEO,
+        storage_key=stored.storage_key,
+        mime_type=file.content_type,
+        byte_size=stored.byte_size,
+        checksum_sha256=stored.checksum_sha256,
+        metadata_json={},
+    )
+    db.add(asset)
+    # The raw bytes are stored synchronously (the request body has to be
+    # read here), but probing the file with ffprobe is real media work, so
+    # it happens as a job in the worker process, not inline in this request.
+    source_video.status = SourceVideoStatus.PROCESSING
     db.commit()
     db.refresh(source_video)
-    return source_video
+
+    # See the comment in create_source_video: snapshot before dispatching.
+    response = SourceVideoRead.model_validate(source_video)
+
+    job = enqueue_job(
+        db,
+        stage=JobStage.UPLOAD_METADATA,
+        source_video_id=source_video.id,
+        input_json={"asset_id": str(asset_id)},
+    )
+    dispatch_job(job.id)
+
+    return response

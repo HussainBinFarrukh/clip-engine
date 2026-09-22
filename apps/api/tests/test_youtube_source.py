@@ -27,7 +27,7 @@ def _create_project(client: TestClient) -> str:
 def test_youtube_url_source_downloads_and_stores_asset(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("app.api.sources.get_youtube_provider", lambda: _FakeYouTubeProvider())
+    monkeypatch.setattr("app.services.jobs.get_youtube_provider", lambda: _FakeYouTubeProvider())
 
     project_id = _create_project(client)
     create_response = client.post(
@@ -44,7 +44,7 @@ def test_youtube_url_source_downloads_and_stores_asset(
 
     source_id = create_response.json()["id"]
 
-    # TestClient runs BackgroundTasks to completion before the request call returns,
+    # The test client's dispatch_job stand-in runs the job synchronously,
     # so the download has already finished by this point.
     final = client.get(f"/projects/{project_id}/sources/{source_id}").json()
     assert final["status"] == "uploaded"
@@ -58,7 +58,9 @@ def test_youtube_url_source_downloads_and_stores_asset(
 def test_youtube_url_download_failure_marks_source_failed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("app.api.sources.get_youtube_provider", lambda: _FailingYouTubeProvider())
+    monkeypatch.setattr(
+        "app.services.jobs.get_youtube_provider", lambda: _FailingYouTubeProvider()
+    )
 
     project_id = _create_project(client)
     create_response = client.post(

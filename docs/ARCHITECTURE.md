@@ -75,7 +75,7 @@ No rights fields. The app does not track or validate source rights — see `docs
 
 - `id`: UUID primary key
 - `source_video_id`: nullable foreign key to `source_videos`
-- `stage`: enum: `youtube_download`, `upload_metadata`, `audio_extract`, `transcribe`
+- `stage`: enum: `test_stage`, `youtube_download`, `upload_metadata`; later phases add `audio_extract`, `transcribe`
 - `state`: enum: `queued`, `processing`, `completed`, `failed`
 - `progress`: integer 0-100
 - `attempts`: integer
@@ -86,6 +86,8 @@ No rights fields. The app does not track or validate source rights — see `docs
 - `created_at`: timestamp
 - `started_at`: nullable timestamp
 - `completed_at`: nullable timestamp
+
+`test_stage` is not a domain concept — it exists only so the generic stage-runner and retry mechanism can be exercised deterministically (fails a configurable number of attempts, then succeeds), without depending on real media processing.
 
 ### transcripts
 
@@ -194,7 +196,8 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 - Accepts MP4 fixture and later configured formats.
 - Validates format and size only. No rights fields are collected or checked.
 - Stores an original `MediaAsset` with a generated asset ID.
-- Enqueues metadata/audio/transcription stages.
+- Enqueues the `upload_metadata` job stage (ffprobe); later phases add audio/transcription stages.
+- Returns immediately, before the job runs.
 
 ### Jobs
 
@@ -217,14 +220,13 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 
 - Add-source form: upload a local file, or paste a YouTube URL.
 - Source list with processing state.
-- Job status polling.
 
 ### Source Detail
 
 - Video player.
 - Metadata (source kind, original YouTube URL if applicable).
+- Job status polling (stage, state, error) with a retry action on failed jobs.
 - Transcript panel with clickable timestamps that seek the player.
-- Processing errors and retry action.
 
 ## Local Development Setup
 
@@ -249,6 +251,10 @@ docker compose run --rm api pytest
 docker compose run --rm web npm test
 docker compose run --rm api alembic upgrade head
 ```
+
+### Worker and API code sharing
+
+The `worker` container mounts `apps/api` read-only and adds it to `PYTHONPATH`, so job stage handlers (`app.services.jobs`, `app.models.*`) run identically whether invoked directly (e.g. in API tests) or via the `run_job_stage` Dramatiq actor in `workers/clip_engine_worker/jobs.py`. The API process only ever enqueues (`run_job_stage.send(...)`); it never runs a stage handler itself outside of tests. Alembic migrations live solely under `apps/api` — the worker never runs migrations, only reads/writes rows in tables the API has already migrated. Both `api` and `worker` share the `storage_data` volume so stage handlers (e.g. ffprobe on an uploaded file) can read what the API wrote.
 
 ## Phase Boundaries
 

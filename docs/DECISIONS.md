@@ -12,6 +12,10 @@ Originally, YouTube URLs were exported as metadata/reference requests only, with
 
 Originally, every render plan required a rights record in addition to commentary QA status, with rendering blocked when rights type or rights reference was missing. The rights-record requirement was superseded the same day — see "Remove Source Rights Gate; Allow YouTube Download" below. The commentary QA and human-approval gates are unaffected and remain required.
 
+## 2026-09-22: Worker Shares the API's Code via a Read-Only Mount
+
+T04 needed the Dramatiq worker to run real job stages (ffprobe, YouTube download) that read/write the same `SourceVideo`/`MediaAsset`/`Job` rows the API defines. Rather than duplicating the SQLAlchemy models and stage logic in the `workers/` package, the `worker` container mounts `apps/api` read-only and adds it to `PYTHONPATH`, so `app.models.*` and `app.services.jobs` import identically in both processes. Alembic migrations still live solely under `apps/api`; the worker never migrates, only reads/writes rows in tables the API has already migrated. The API only ever enqueues job messages (`run_job_stage.send(...)`) — the worker is the only process that executes a stage handler outside of tests. Both containers share the `storage_data` volume so a stage handler can read a file the API wrote.
+
 ## 2026-09-22: Remove Source Rights Gate; Allow YouTube Download
 
 At explicit product direction, the app no longer collects or validates a `rights_type`/`rights_reference` on `SourceVideo`, and rendering/publishing is no longer blocked on a rights record. `SourceVideo` can be created from a local upload or a YouTube URL; YouTube URLs are downloaded locally (e.g. via `yt-dlp`) rather than kept as reference-only metadata.

@@ -52,6 +52,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
       REDIS_URL: redis://redis:6379/0
+      STORAGE_ROOT: /data/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,7 +60,9 @@ services:
         condition: service_healthy
     volumes:
       - ./workers:/app/workers
-    command: ["dramatiq", "clip_engine_worker.noop"]
+      - ./apps/api:/app/apps/api:ro
+      - storage_data:/data/storage
+    command: ["dramatiq", "clip_engine_worker.noop", "clip_engine_worker.jobs"]
 
   worker-smoke:
     build:

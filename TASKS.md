@@ -67,7 +67,7 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 
 **Out of scope:** Processing beyond storing the original; rights tracking (intentionally removed, see `docs/DECISIONS.md`).
 
-### T04: Job system · status: todo
+### T04: Job system · status: done
 **Build:**
 - Job table with states (queued, processing, completed, failed), progress and error fields.
 - A stage-runner pattern where each stage is idempotent and persists its state before the next stage starts.

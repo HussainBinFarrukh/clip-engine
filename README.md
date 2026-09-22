@@ -6,9 +6,9 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T04 Job system.
+Current task: T05 Audio extraction and transcription.
 
-T03 (Upload, YouTube ingestion and storage) is done. Users can create a project, then add a source either by uploading an MP4 or by pasting a YouTube URL (downloaded server-side via `yt-dlp`). The app does not gate on source rights; users are responsible for the legality of what they provide (see `docs/DECISIONS.md`).
+T03 (Upload, YouTube ingestion and storage) and T04 (Job system) are done. Users can create a project, then add a source either by uploading an MP4 or by pasting a YouTube URL (downloaded server-side via `yt-dlp`). Both flows return immediately and finish via a background job processed by the worker; a failed job (e.g. an unreachable YouTube URL) can be retried from the Source Detail page. The app does not gate on source rights; users are responsible for the legality of what they provide (see `docs/DECISIONS.md`).
 
 T02 (Scaffold) is done. The monorepo, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, tests, and a 45-second speech MP4 fixture are all in place. `docker compose up` serves the web page and API health check, the no-op job runs, and all test suites pass.
 

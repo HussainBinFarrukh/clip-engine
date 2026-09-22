@@ -30,7 +30,13 @@ def test_upload_fixture_stores_original_and_metadata(
         )
 
     assert upload_response.status_code == 200
-    updated = upload_response.json()
+    # The response reflects the state at the moment of enqueueing the
+    # upload_metadata job, before ffprobe runs — matching the "returns
+    # before any stage runs" contract even though the test's job dispatch
+    # happens to run synchronously.
+    assert upload_response.json()["status"] == "processing"
+
+    updated = client.get(f"/projects/{project_id}/sources/{source['id']}").json()
     assert updated["status"] == "uploaded"
     assert updated["duration_ms"] and updated["duration_ms"] > 0
     assert updated["width"] and updated["height"]

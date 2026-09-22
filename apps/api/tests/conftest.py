@@ -1,18 +1,20 @@
 import shutil
+import uuid
 from collections.abc import Generator
 from pathlib import Path
 
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 import app.models  # noqa: F401  (registers models on Base.metadata)
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.services.jobs import execute_job
 from app.services.storage import LocalDiskStorageProvider, get_storage_provider
 
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
@@ -52,15 +54,30 @@ def storage_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def client(
-    storage_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> Generator[TestClient, None, None]:
+def test_engine() -> Generator[Engine, None, None]:
     engine = create_engine(_test_database_url())
     for table in reversed(Base.metadata.sorted_tables):
         with engine.begin() as conn:
             conn.execute(table.delete())
+    yield engine
+    engine.dispose()
 
-    TestSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+@pytest.fixture
+def db_session(test_engine: Engine) -> Generator[Session, None, None]:
+    session_factory = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
+    session = session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def client(
+    test_engine: Engine, storage_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> Generator[TestClient, None, None]:
+    TestSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
 
     def override_get_db() -> Generator:
         db = TestSessionLocal()
@@ -74,17 +91,26 @@ def client(
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_storage_provider] = lambda: storage_provider
 
-    # The YouTube-download background task resolves its DB session and
-    # storage provider directly (it runs outside a request scope, so
-    # FastAPI's dependency_overrides above don't reach it). Patch the
-    # names it looks up in app.api.sources so tests exercise the same
-    # test database and temp storage as the rest of the request.
-    monkeypatch.setattr("app.api.sources.SessionLocal", TestSessionLocal)
-    monkeypatch.setattr("app.api.sources.get_storage_provider", lambda: storage_provider)
+    def _sync_dispatch(job_id: uuid.UUID) -> None:
+        job_db = TestSessionLocal()
+        try:
+            execute_job(job_db, job_id)
+        finally:
+            job_db.close()
+
+    # Job stage handlers (app.services.jobs) resolve the storage/YouTube
+    # providers directly, and dispatch_job normally hands the job off to
+    # the separate worker process over Redis — neither runs inside this
+    # request/session scope, so FastAPI's dependency_overrides above don't
+    # reach them. Patch the names each caller looks up so a "dispatched"
+    # job actually runs, synchronously, against this test's database and
+    # temp storage.
+    monkeypatch.setattr("app.api.sources.dispatch_job", _sync_dispatch)
+    monkeypatch.setattr("app.api.jobs.dispatch_job", _sync_dispatch)
+    monkeypatch.setattr("app.services.jobs.get_storage_provider", lambda: storage_provider)
 
     with TestClient(app) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
-    engine.dispose()
     shutil.rmtree(storage_root, ignore_errors=True)
