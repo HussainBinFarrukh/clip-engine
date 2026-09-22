@@ -6,9 +6,9 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T01 Architecture and docs.
+Current task: T03 Upload, rights validation, and storage.
 
-T01 is documentation-only. The production stack begins in T02 with the monorepo scaffold, Docker Compose, FastAPI, Next.js, worker, Alembic, test tooling, and media fixture.
+T02 (Scaffold) is done. The monorepo, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, tests, and a 45-second speech MP4 fixture are all in place. `docker compose up` serves the web page and API health check, the no-op job runs, and all test suites pass.
 
 ## Key Docs
 
@@ -16,6 +16,30 @@ T01 is documentation-only. The production stack begins in T02 with the monorepo 
 - `docs/ROADMAP.md`: Task roadmap mirrored from `TASKS.md`.
 - `docs/DECISIONS.md`: Architecture and product decisions.
 - `docs/PLATFORMS.md`: Platform constraints and verification notes.
+
+## Local Checks
+
+The following non-Docker checks pass locally:
+
+```powershell
+npm --workspace @clip-engine/web test
+npm --workspace @clip-engine/web run lint
+.venv\Scripts\python.exe -m pytest apps\api\tests
+.venv\Scripts\python.exe -m pytest workers\tests
+.venv\Scripts\python.exe -m ruff check apps\api workers
+```
+
+Or run the helper script:
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File .\scripts\test-local.ps1
+```
+
+The media fixture can be regenerated with:
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File .\scripts\create-fixture.ps1
+```
 
 ## Non-Negotiables
 

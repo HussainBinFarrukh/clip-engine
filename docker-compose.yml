@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: clip_engine
+      POSTGRES_USER: clip_engine
+      POSTGRES_PASSWORD: clip_engine
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clip_engine -d clip_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+
+  worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers:/app/workers
+    command: ["dramatiq", "clip_engine_worker.noop"]
+
+  worker-smoke:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    volumes:
+      - ./workers:/app/workers
+    command: ["python", "-m", "clip_engine_worker.enqueue_noop"]
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      API_BASE_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/apps/web/.next
+
+volumes:
+  postgres_data:

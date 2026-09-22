@@ -33,7 +33,7 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 **Accept:** Every Phase 1 table, endpoint and page named in later Phase 1 tasks appears in `ARCHITECTURE.md`.
 **Out of scope:** Code.
 
-### T02: Scaffold · status: todo
+### T02: Scaffold · status: done
 **Build:**
 - Monorepo layout from `AGENTS.md`.
 - Docker Compose running web, api, worker, postgres and redis.

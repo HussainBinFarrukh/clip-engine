@@ -1,0 +1,12 @@
+{
+  "name": "clip-engine",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/web", "packages/shared-types"],
+  "scripts": {
+    "web:dev": "npm --workspace @clip-engine/web run dev",
+    "web:test": "npm --workspace @clip-engine/web test",
+    "web:lint": "npm --workspace @clip-engine/web run lint",
+    "web:format": "npm --workspace @clip-engine/web run format"
+  }
+}

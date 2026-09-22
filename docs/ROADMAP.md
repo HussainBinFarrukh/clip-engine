@@ -45,7 +45,8 @@ This roadmap mirrors `TASKS.md`. Build one task at a time, in order.
 
 ## Current Status
 
-- Current task: T02 Scaffold.
+- Current task: T03 Upload, rights validation, and storage.
 - T01 docs exist: `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/DECISIONS.md`, and `docs/PLATFORMS.md`.
 - T01 is complete.
-- T02 has not started. The monorepo, Docker Compose stack, backend services, and tests are not implemented yet.
+- T02 is complete. The monorepo scaffold, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, lint/format/test tooling, and a 45-second speech MP4 fixture all exist and pass acceptance.
+- T02 acceptance passed: Docker Desktop's WSL2 backend became available, `docker compose up` serves the web page and API health check, the no-op job runs (worker log shows `noop job: compose-smoke`), and the API, worker, and web test suites all pass in-container.
