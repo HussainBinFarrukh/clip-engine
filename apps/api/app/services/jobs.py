@@ -7,15 +7,31 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.clip_candidate import ClipCandidate
 from app.models.job import Job, JobStage, JobState
 from app.models.media_asset import AssetKind, MediaAsset
 from app.models.signal import Signal, SignalType
 from app.models.source_video import SourceVideo, SourceVideoStatus
 from app.models.transcript import Transcript, TranscriptSegment, TranscriptWord
+from app.services.ai_analysis import run_llm_call
+from app.services.candidate_scoring import (
+    ClipCandidateScore,
+    compute_heuristic_features,
+    deduplicate_windows,
+    heuristic_score,
+)
+from app.services.candidate_windows import (
+    CandidateWindow,
+    SentenceBoundary,
+    generate_candidate_windows,
+)
+from app.services.clip_presets import CLIP_PRESETS
 from app.services.ffmpeg import extract_audio_16k_mono_wav
 from app.services.ffprobe import probe_video
 from app.services.ingest import store_original_video
 from app.services.job_queue import dispatch_job as _default_dispatch_job
+from app.services.llm_provider import LLMStructuredOutputError, get_llm_provider
+from app.services.prompts import load_prompt
 from app.services.signals import (
     compute_loudness_rms,
     compute_pauses,
@@ -25,6 +41,13 @@ from app.services.signals import (
 from app.services.storage import get_storage_provider
 from app.services.transcriber import TranscriptResult, get_transcriber
 from app.services.youtube import get_youtube_provider
+
+_MAX_CANDIDATES_PER_PRESET = 3
+_DEDUP_IOU_THRESHOLD = 0.5
+# (heuristic weight, LLM weight) — the LLM's qualitative read dominates;
+# heuristics are a cheap sanity signal. Tunable, not tuned — see
+# app.services.candidate_scoring.heuristic_score's own docstring.
+_COMBINED_SCORE_WEIGHTS = (0.3, 0.7)
 
 StageHandler = Callable[[Session, Job], dict]
 Dispatcher = Callable[[uuid.UUID], None]
@@ -303,6 +326,166 @@ def _run_signal_extraction_stage(db: Session, job: Job) -> dict:
     }
 
 
+def _save_clip_candidates_for_version(
+    db: Session,
+    source_video_id: uuid.UUID,
+    preset_name: str,
+    prompt_name: str,
+    prompt_version: int,
+    candidates: list[ClipCandidate],
+) -> None:
+    # Replaces prior candidates for this exact (preset, prompt_version) —
+    # idempotent retry — but leaves other prompt_versions' rows alone, so
+    # re-scoring under a new prompt version doesn't erase old results. See
+    # docs/DECISIONS.md.
+    existing = db.scalars(
+        select(ClipCandidate).where(
+            ClipCandidate.source_video_id == source_video_id,
+            ClipCandidate.preset == preset_name,
+            ClipCandidate.prompt_name == prompt_name,
+            ClipCandidate.prompt_version == prompt_version,
+        )
+    ).all()
+    for old in existing:
+        db.delete(old)
+    db.flush()
+    for candidate in candidates:
+        db.add(candidate)
+
+
+def _run_candidate_scoring_stage(db: Session, job: Job) -> dict:
+    source_video = db.get(SourceVideo, job.source_video_id)
+    if source_video is None:
+        raise ValueError("source video not found")
+
+    transcript = db.scalars(
+        select(Transcript)
+        .where(Transcript.source_video_id == source_video.id)
+        .order_by(Transcript.created_at.desc())
+    ).first()
+    if transcript is None:
+        raise ValueError("source video has no transcript yet")
+
+    signal_rows = db.scalars(
+        select(Signal).where(Signal.source_video_id == source_video.id)
+    ).all()
+    if not signal_rows:
+        raise ValueError("source video has no signals extracted yet")
+    signals_by_type = {s.signal_type: s.points_json for s in signal_rows}
+    loudness = signals_by_type.get(SignalType.LOUDNESS_RMS, [])
+    pauses = signals_by_type.get(SignalType.PAUSE, [])
+    speech_rate = signals_by_type.get(SignalType.SPEECH_RATE, [])
+    scene_changes = signals_by_type.get(SignalType.SCENE_CHANGE, [])
+
+    ordered_segments = sorted(transcript.segments, key=lambda s: s.start_ms)
+    sentences = [
+        SentenceBoundary(index=i, start_ms=s.start_ms, end_ms=s.end_ms)
+        for i, s in enumerate(ordered_segments)
+    ]
+
+    prompt_version = job.input_json.get("prompt_version", 1)
+    prompt_template = load_prompt("clip_scoring", prompt_version)
+    provider = get_llm_provider()
+
+    total_scored = 0
+    total_failed = 0
+    presets_with_candidates: list[str] = []
+
+    for preset in CLIP_PRESETS.values():
+        windows = generate_candidate_windows(sentences, preset)
+        if not windows:
+            continue
+
+        features_by_window: dict[CandidateWindow, tuple] = {}
+        scored_for_dedup: list[tuple[CandidateWindow, float]] = []
+        for window in windows:
+            features = compute_heuristic_features(
+                window, loudness, pauses, speech_rate, scene_changes
+            )
+            h_score = heuristic_score(features)
+            features_by_window[window] = (features, h_score)
+            scored_for_dedup.append((window, h_score))
+
+        deduped = deduplicate_windows(
+            scored_for_dedup,
+            iou_threshold=_DEDUP_IOU_THRESHOLD,
+            max_keep=_MAX_CANDIDATES_PER_PRESET,
+        )
+
+        new_candidates: list[ClipCandidate] = []
+        for window in deduped:
+            features, h_score = features_by_window[window]
+            transcript_text = " ".join(
+                ordered_segments[i].text
+                for i in range(window.start_sentence_index, window.end_sentence_index + 1)
+            )
+            prompt = prompt_template.format(
+                preset=preset.name,
+                duration_s=window.duration_ms / 1000,
+                transcript_text=transcript_text,
+            )
+
+            try:
+                score = run_llm_call(
+                    db,
+                    provider,
+                    "clip_scoring",
+                    prompt_version,
+                    prompt,
+                    ClipCandidateScore,
+                    source_video_id=source_video.id,
+                )
+            except LLMStructuredOutputError:
+                total_failed += 1
+                continue
+
+            heuristic_weight, llm_weight = _COMBINED_SCORE_WEIGHTS
+            combined = round(heuristic_weight * h_score + llm_weight * score.score, 1)
+
+            new_candidates.append(
+                ClipCandidate(
+                    source_video_id=source_video.id,
+                    preset=preset.name,
+                    start_ms=window.start_ms,
+                    end_ms=window.end_ms,
+                    heuristic_score=h_score,
+                    llm_score=float(score.score),
+                    combined_score=combined,
+                    hook_line=score.hook_line,
+                    self_contained=score.self_contained,
+                    emotional_peak=score.emotional_peak,
+                    quotable_line=score.quotable_line,
+                    reason=score.reason,
+                    feature_vector={
+                        "avg_loudness_dbfs": features.avg_loudness_dbfs,
+                        "pause_ratio": features.pause_ratio,
+                        "avg_speech_rate_wpm": features.avg_speech_rate_wpm,
+                        "scene_change_count": features.scene_change_count,
+                    },
+                    model=provider.model,
+                    prompt_name="clip_scoring",
+                    prompt_version=prompt_version,
+                )
+            )
+            total_scored += 1
+
+        if new_candidates:
+            _save_clip_candidates_for_version(
+                db, source_video.id, preset.name, "clip_scoring", prompt_version, new_candidates
+            )
+            presets_with_candidates.append(preset.name)
+
+    if total_scored == 0 and total_failed > 0:
+        raise RuntimeError(f"all {total_failed} candidate scoring call(s) failed")
+
+    return {
+        "candidates_scored": total_scored,
+        "candidates_failed": total_failed,
+        "presets": presets_with_candidates,
+        "prompt_version": prompt_version,
+    }
+
+
 _STAGE_HANDLERS: dict[JobStage, StageHandler] = {
     JobStage.TEST_STAGE: _run_test_stage,
     JobStage.UPLOAD_METADATA: _run_upload_metadata_stage,
@@ -310,6 +493,7 @@ _STAGE_HANDLERS: dict[JobStage, StageHandler] = {
     JobStage.AUDIO_EXTRACT: _run_audio_extract_stage,
     JobStage.TRANSCRIBE: _run_transcribe_stage,
     JobStage.SIGNAL_EXTRACTION: _run_signal_extraction_stage,
+    JobStage.CANDIDATE_SCORING: _run_candidate_scoring_stage,
 }
 
 

@@ -1,4 +1,5 @@
 import json
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import lru_cache
@@ -46,6 +47,15 @@ _REQUEST_TIMEOUT_SECONDS = 120
 _GEMINI_PRICING_PER_MILLION_TOKENS: dict[str, dict[str, float]] = {
     "gemini-3.6-flash": {"input": 0.10, "output": 0.40},
 }
+# Transient-failure retry: observed a real, reproducible 503 "Service
+# Unavailable" from the live API on a normal-sized prompt (a trivial "Say
+# OK" prompt succeeded immediately after) — server-side overload, not a
+# client bug. Retried separately from generate_structured's JSON-validity
+# retry loop, since this is a transport/service-availability concern, not
+# an output-quality one.
+_TRANSIENT_RETRY_ATTEMPTS = 3
+_TRANSIENT_RETRY_BACKOFF_SECONDS = 2.0
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class GeminiProvider(LLMProvider):
@@ -55,12 +65,12 @@ class GeminiProvider(LLMProvider):
         self._api_key = api_key
         self.model = model
 
-    def generate(self, prompt: str) -> tuple[str, LLMUsage]:
+    def _post(self, prompt: str) -> requests.Response:
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{self.model}:generateContent"
         )
-        response = requests.post(
+        return requests.post(
             url,
             params={"key": self._api_key},
             json={
@@ -73,6 +83,25 @@ class GeminiProvider(LLMProvider):
             },
             timeout=_REQUEST_TIMEOUT_SECONDS,
         )
+
+    def generate(self, prompt: str) -> tuple[str, LLMUsage]:
+        response = None
+        for attempt in range(1, _TRANSIENT_RETRY_ATTEMPTS + 1):
+            try:
+                response = self._post(prompt)
+                if response.status_code in _RETRYABLE_STATUS_CODES:
+                    raise requests.HTTPError(
+                        f"{response.status_code} (retryable) for url: {response.url}",
+                        response=response,
+                    )
+                break
+            except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as exc:
+                if attempt == _TRANSIENT_RETRY_ATTEMPTS:
+                    raise LLMError(
+                        f"Gemini request failed after {attempt} attempt(s): {exc}"
+                    ) from exc
+                time.sleep(_TRANSIENT_RETRY_BACKOFF_SECONDS * attempt)
+
         response.raise_for_status()
         payload = response.json()
 

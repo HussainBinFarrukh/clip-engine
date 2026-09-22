@@ -143,17 +143,19 @@ Hosted adapter targets Gemini, at explicit product direction (intent to add Open
 
 **Out of scope:** Clip logic.
 
-### T09: Scoring, ranking and features · status: todo
+### T09: Scoring, ranking and features · status: done
 **Build:**
 - LLM scoring of windows: hook line, self-containedness, emotional peak, quotable line, score 0–100, and a reason.
 - A combined score from heuristic signals plus the LLM score.
 - Dedupe of overlapping candidates.
 - ClipCandidate storing its full feature vector plus the model and prompt versions.
 
+Dedup runs as non-maximum suppression on heuristic score, *before* any LLM call (caps real cost/latency); combined score is 30% heuristic / 70% LLM, both weightings an explicit, documented starting point pending real performance data (see `docs/DECISIONS.md`).
+
 **Accept:**
-- The fixture produces ranked candidates, each with a reason.
-- Features are persisted.
-- Re-scoring with a new prompt version keeps the old results.
+- The fixture produces ranked candidates, each with a reason. Verified structurally end-to-end with a fake LLM provider (deterministic); the underlying HTTP/parsing/schema/cost-logging mechanism is separately verified against the live Gemini API (T08's real-call test passed this session). The full real pipeline hit a genuine, reproduced Gemini-side `503`/`429` capacity issue during testing (see `docs/DECISIONS.md`) — real-API tests skip gracefully on that specific signature rather than fail, and a transient-error retry-with-backoff was added at the HTTP layer as a direct result.
+- Features are persisted. Verified (`ClipCandidate.feature_vector`).
+- Re-scoring with a new prompt version keeps the old results. Verified — required (and got) a real second prompt file, `clip_scoring/v2.txt`, not a synthetic version number.
 
 **Out of scope:** UI beyond the API.
 

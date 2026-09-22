@@ -1,4 +1,5 @@
 from app.models.ai_analysis import AIAnalysis
+from app.models.clip_candidate import ClipCandidate
 from app.models.job import Job, JobStage, JobState
 from app.models.media_asset import AssetKind, MediaAsset
 from app.models.project import Project
@@ -9,6 +10,7 @@ from app.models.transcript import Transcript, TranscriptSegment, TranscriptWord
 __all__ = [
     "AIAnalysis",
     "AssetKind",
+    "ClipCandidate",
     "Job",
     "JobStage",
     "JobState",

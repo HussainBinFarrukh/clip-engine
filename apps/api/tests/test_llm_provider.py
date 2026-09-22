@@ -15,6 +15,7 @@ from app.services.llm_provider import (
     get_llm_provider,
 )
 from app.services.prompts import load_prompt
+from tests.conftest import skip_if_transient_llm_outage
 
 
 class DemoSchema(BaseModel):
@@ -146,7 +147,10 @@ def test_real_gemini_call_produces_valid_structured_output(db_session: Session) 
         input_text="Clip Engine helps creators turn long videos into short clips."
     )
 
-    result = run_llm_call(db_session, provider, "structured_demo", 1, prompt, DemoSchema)
+    try:
+        result = run_llm_call(db_session, provider, "structured_demo", 1, prompt, DemoSchema)
+    except LLMError as exc:
+        skip_if_transient_llm_outage(exc)  # skips, or re-raises exc if not transient
 
     assert isinstance(result.summary, str) and len(result.summary) > 0
     assert 0.0 <= result.confidence <= 1.0

@@ -16,6 +16,7 @@ class JobStage(str, enum.Enum):
     AUDIO_EXTRACT = "audio_extract"
     TRANSCRIBE = "transcribe"
     SIGNAL_EXTRACTION = "signal_extraction"
+    CANDIDATE_SCORING = "candidate_scoring"
 
 
 class JobState(str, enum.Enum):

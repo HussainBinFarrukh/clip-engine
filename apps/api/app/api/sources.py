@@ -10,12 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.clip_candidate import ClipCandidate
 from app.models.job import JobStage
 from app.models.media_asset import AssetKind, MediaAsset
 from app.models.project import Project
 from app.models.signal import Signal
 from app.models.source_video import SourceKind, SourceVideo, SourceVideoStatus
 from app.models.transcript import Transcript
+from app.schemas.clip_candidate import ClipCandidateRead, ScoreCandidatesRequest
 from app.schemas.media_asset import MediaAssetRead
 from app.schemas.signal import SignalRead
 from app.schemas.source_video import SourceVideoCreate, SourceVideoRead
@@ -280,6 +282,57 @@ def list_source_signals(
 ) -> list[Signal]:
     _get_source_or_404(db, project_id, source_video_id)
     return list(db.scalars(select(Signal).where(Signal.source_video_id == source_video_id)))
+
+
+@router.post("/{source_video_id}/score-candidates", response_model=SourceVideoRead)
+def score_source_candidates(
+    project_id: uuid.UUID,
+    source_video_id: uuid.UUID,
+    payload: ScoreCandidatesRequest | None = None,
+    db: Session = Depends(get_db),
+) -> SourceVideoRead:
+    payload = payload or ScoreCandidatesRequest()
+    source_video = _get_source_or_404(db, project_id, source_video_id)
+
+    if source_video.status != SourceVideoStatus.READY:
+        raise HTTPException(
+            status_code=400,
+            detail="Candidate scoring needs a transcript first (source must be 'ready')",
+        )
+    has_signals = db.scalars(
+        select(Signal.id).where(Signal.source_video_id == source_video_id).limit(1)
+    ).first()
+    if has_signals is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Candidate scoring needs signals extracted first",
+        )
+
+    response = SourceVideoRead.model_validate(source_video)
+
+    job = enqueue_job(
+        db,
+        stage=JobStage.CANDIDATE_SCORING,
+        source_video_id=source_video.id,
+        input_json={"prompt_version": payload.prompt_version},
+    )
+    dispatch_job(job.id)
+
+    return response
+
+
+@router.get("/{source_video_id}/candidates", response_model=list[ClipCandidateRead])
+def list_source_candidates(
+    project_id: uuid.UUID, source_video_id: uuid.UUID, db: Session = Depends(get_db)
+) -> list[ClipCandidate]:
+    _get_source_or_404(db, project_id, source_video_id)
+    return list(
+        db.scalars(
+            select(ClipCandidate)
+            .where(ClipCandidate.source_video_id == source_video_id)
+            .order_by(ClipCandidate.combined_score.desc())
+        )
+    )
 
 
 @transcript_router.get("/{source_video_id}/transcript", response_model=TranscriptRead)

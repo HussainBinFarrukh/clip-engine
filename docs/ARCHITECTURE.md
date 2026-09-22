@@ -281,7 +281,36 @@ Most stages are triggered explicitly (upload → `upload_metadata`, a YouTube UR
 
 ## Candidate Windows (Phase 2)
 
-`app/services/clip_presets.py` mirrors the "Clip length presets" table in `AGENTS.md` (`shorts_campaign`, `shorts_long`, `tiktok_rewards`, `longform` — min/max duration and aspect ratio). `app/services/candidate_windows.py` generates every window, per preset, whose start and end land exactly on a transcript sentence (segment) boundary and whose duration fits the preset's bounds; overlapping windows from different start sentences are kept, not deduplicated. This is pure, tested library code with no DB table or endpoint yet — see `docs/DECISIONS.md` for why persistence waits for T09 (`ClipCandidate`, which stores the scored, feature-carrying version of a window).
+`app/services/clip_presets.py` mirrors the "Clip length presets" table in `AGENTS.md` (`shorts_campaign`, `shorts_long`, `tiktok_rewards`, `longform` — min/max duration and aspect ratio). `app/services/candidate_windows.py` generates every window, per preset, whose start and end land exactly on a transcript sentence (segment) boundary and whose duration fits the preset's bounds; overlapping windows from different start sentences are kept, not deduplicated.
+
+## Candidate Scoring (Phase 2)
+
+`POST /projects/{project_id}/sources/{source_video_id}/score-candidates` (body: `{"prompt_version": int, default 1}`), requires the source to be `ready` with at least one `Signal` row extracted. Enqueues `candidate_scoring`, returns immediately. `GET /projects/{project_id}/sources/{source_video_id}/candidates` lists results, ranked by `combined_score` descending.
+
+Per preset, the `candidate_scoring` stage:
+
+1. Generates candidate windows (`app/services/candidate_windows.py`).
+2. Scores each by cheap heuristics only — `app/services/candidate_scoring.py`'s `compute_heuristic_features`/`heuristic_score`, from the T06 `Signal` series (avg loudness, pause ratio, avg speech rate, scene-change count within the window). No LLM call yet.
+3. Deduplicates via non-maximum suppression on those heuristic scores (`deduplicate_windows`): keeps the highest-scoring window, drops any remaining window overlapping it by more than `iou_threshold` (default 0.5), repeats, capped at `_MAX_CANDIDATES_PER_PRESET` (3). This bounds how many (paid, slow) LLM calls one scoring run makes.
+4. Only the survivors get an LLM call — `app/services/llm_provider.py`'s `run_llm_call`, prompt `clip_scoring/v{version}`, schema `ClipCandidateScore` (`hook_line`, `self_contained`, `emotional_peak`, `quotable_line`, `score` 0-100, `reason`). A candidate whose LLM call fails (even after T08's retry) is skipped, not fatal to the whole stage — partial results beat none; the stage itself only fails if *every* call failed.
+5. `combined_score = 0.3 * heuristic_score + 0.7 * llm_score` (tunable, undocumented-as-final — see `docs/DECISIONS.md`), persisted as a `ClipCandidate` row alongside the full feature vector, model, prompt name, and prompt version.
+
+### clip_candidates
+
+- `id`: UUID primary key
+- `source_video_id`: foreign key to `source_videos`
+- `preset`: text
+- `start_ms`, `end_ms`: integer
+- `heuristic_score`, `llm_score`, `combined_score`: float
+- `hook_line`, `self_contained`, `emotional_peak`: boolean
+- `quotable_line`: nullable text
+- `reason`: text
+- `feature_vector`: JSON (the heuristic sub-features used)
+- `model`, `prompt_name`: text
+- `prompt_version`: integer
+- `created_at`: timestamp
+
+Re-scoring the same `(source_video, preset, prompt_name, prompt_version)` replaces those rows (idempotent retry). Scoring under a *new* `prompt_version` adds alongside old rows rather than replacing them — old results survive a prompt change, which is what lets the learning loop (`AGENTS.md`) eventually compare prompt versions against each other. See `docs/DECISIONS.md`.
 
 ## Local Development Setup
 

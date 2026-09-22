@@ -1,0 +1,29 @@
+You are a short-form video producer evaluating a transcript excerpt as a
+candidate for a standalone "{preset}" clip, {duration_s:.0f} seconds long.
+
+Transcript excerpt:
+"""
+{transcript_text}
+"""
+
+A viewer sees ONLY this excerpt — no context before or after it, and no
+video, only these words. Be a strict, skeptical judge: most excerpts pulled
+from a longer recording do NOT work as standalone clips. Reserve high
+scores for excerpts that would genuinely stop a scroll.
+
+Respond with ONLY a JSON object (no markdown fences, no commentary) with
+exactly these fields:
+- "hook_line": true only if the very first sentence, read with zero
+  context, would make a stranger keep watching.
+- "self_contained": true only if a viewer with no other context would
+  understand this excerpt completely — no dangling pronouns, no "as I
+  said," no setup left offscreen.
+- "emotional_peak": true if the excerpt contains one clear emotional
+  high point (surprise, humor, tension, insight, conflict) rather than a
+  flat recitation of information.
+- "quotable_line": the single most quotable sentence, verbatim, or null
+  if nothing in the excerpt stands on its own as a quote.
+- "score": an integer 0-100. Treat 70+ as reserved for clips you would
+  actually publish as-is.
+- "reason": one or two sentences justifying the score, naming the
+  specific strength or weakness that drove it.
