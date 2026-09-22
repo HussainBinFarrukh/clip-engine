@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const pipelineSteps = [
   "Ingest",
   "Transcribe",
@@ -13,14 +15,16 @@ export default function Home() {
       <section className="shell">
         <div>
           <p className="eyebrow">Clip Engine</p>
-          <h1>Authorized video clipping pipeline</h1>
+          <h1>Video clipping pipeline</h1>
         </div>
 
         <div className="panel">
           <p>
             T02 scaffold is live: Next.js web, FastAPI API, Dramatiq worker,
-            PostgreSQL, Redis, Alembic, and test tooling. Feature work starts
-            after the scaffold passes.
+            PostgreSQL, Redis, Alembic, and test tooling.
+          </p>
+          <p>
+            <Link href="/projects">Go to projects →</Link>
           </p>
         </div>
 

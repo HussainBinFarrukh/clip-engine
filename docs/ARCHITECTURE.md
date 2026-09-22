@@ -182,8 +182,11 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 
 - `POST /projects/{project_id}/sources`
 - Creates a source video record, either `source_kind: local_upload` (awaiting a follow-up upload) or `source_kind: youtube_url` (with a `source_reference` URL, which enqueues the `youtube_download` stage immediately).
+- `GET /projects/{project_id}/sources`
 - `GET /projects/{project_id}/sources/{source_video_id}`
 - `GET /projects/{project_id}/sources/{source_video_id}/assets`
+- `GET /projects/{project_id}/sources/{source_video_id}/assets/{asset_id}/content`
+- Streams the stored asset bytes (e.g. for the video player) by its generated asset ID. Never exposes the underlying filesystem path.
 
 ### Uploads
 

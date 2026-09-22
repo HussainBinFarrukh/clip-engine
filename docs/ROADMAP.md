@@ -45,8 +45,9 @@ This roadmap mirrors `TASKS.md`. Build one task at a time, in order.
 
 ## Current Status
 
-- Current task: T03 Upload, YouTube ingestion, and storage.
+- Current task: T04 Job system.
 - 2026-09-22 scope change: the source-rights gate was removed at explicit product direction, and YouTube URL download is now in scope (via a `YouTubeSourceProvider`, e.g. `yt-dlp`). This knowingly runs against YouTube's Terms of Service; the user is responsible for source legality. See `docs/DECISIONS.md`.
+- T03 is complete. `Project`, `SourceVideo` (no rights fields), and `MediaAsset` tables exist with an Alembic migration. `LocalDiskStorageProvider` stores originals; API responses never expose `storage_key` or filesystem paths. Upload endpoint validates MP4 format/size and extracts ffprobe metadata. `YtDlpYouTubeProvider` downloads a YouTube URL in a background task (verified against a real, very short public video) and stores it the same way as an upload. Web has Projects list/create, Project detail (add-source form: upload or YouTube URL) and Source detail (metadata + video player via a new streaming endpoint) pages. 12 API tests pass (including a fake-provider YouTube success/failure pair), plus web test/lint/format.
 - T01 docs exist: `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/DECISIONS.md`, and `docs/PLATFORMS.md`.
 - T01 is complete.
 - T02 is complete. The monorepo scaffold, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, lint/format/test tooling, and a 45-second speech MP4 fixture all exist and pass acceptance.

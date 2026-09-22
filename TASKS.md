@@ -51,7 +51,7 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 
 **Out of scope:** Domain tables and features.
 
-### T03: Upload, YouTube ingestion and storage · status: todo
+### T03: Upload, YouTube ingestion and storage · status: done
 **Build:**
 - Project and SourceVideo tables (`source_kind`: `local_upload` or `youtube_url`), plus MediaAsset. No rights fields.
 - `StorageProvider` with a local-disk adapter.
