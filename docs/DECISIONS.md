@@ -4,13 +4,19 @@
 
 The current workstation stays dependency-free because Node, Python, Git, and ffmpeg are not available in the shell. This lets the project make usable progress while the future stack is documented for the next environment setup step.
 
-## 2026-09-22: YouTube URLs Are References Only
+## 2026-09-22: YouTube URLs Are References Only (Superseded)
 
-YouTube URLs are exported as metadata/reference requests only. The product must not download or store YouTube audiovisual content without explicit platform approval. Source media for actual clipping starts with local authorized uploads.
+Originally, YouTube URLs were exported as metadata/reference requests only, with no download of YouTube audiovisual content. This was superseded the same day — see "Remove Source Rights Gate; Allow YouTube Download" below.
 
-## 2026-09-22: Rights and Commentary Are Required Gates
+## 2026-09-22: Rights and Commentary Are Required Gates (Superseded)
 
-Every render plan carries a rights record and commentary QA status. Backend rendering must block when rights type, rights reference, or commentary is missing. Publishing remains blocked until a human approval state is set.
+Originally, every render plan required a rights record in addition to commentary QA status, with rendering blocked when rights type or rights reference was missing. The rights-record requirement was superseded the same day — see "Remove Source Rights Gate; Allow YouTube Download" below. The commentary QA and human-approval gates are unaffected and remain required.
+
+## 2026-09-22: Remove Source Rights Gate; Allow YouTube Download
+
+At explicit product direction, the app no longer collects or validates a `rights_type`/`rights_reference` on `SourceVideo`, and rendering/publishing is no longer blocked on a rights record. `SourceVideo` can be created from a local upload or a YouTube URL; YouTube URLs are downloaded locally (e.g. via `yt-dlp`) rather than kept as reference-only metadata.
+
+This was raised as a legal/platform-policy concern before implementing: downloading YouTube content violates YouTube's Terms of Service and API Developer Policies, and republishing derivative clips of unrighted content carries real copyright exposure. The product owner explicitly accepted that risk and directed that the user, not the app, is responsible for having rights to whatever they provide. The app must not misrepresent this as sanctioned or safe, must not add features that make bulk/automated scraping easier, and must keep the still-mandatory commentary QA and human-approval-before-publishing gates intact — this decision narrows scope to the rights record only.
 
 ## 2026-09-22: Platform Limits Stay Configurable
 

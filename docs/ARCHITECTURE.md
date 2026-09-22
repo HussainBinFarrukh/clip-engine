@@ -1,6 +1,6 @@
 # Architecture
 
-ClipForge is a monorepo content engine for authorized video sources. Phase 1 builds ingestion, rights validation, storage, background jobs, audio extraction, transcription, and a transcript review UI.
+ClipForge is a monorepo content engine for user-provided video sources (local upload or YouTube URL). Phase 1 builds ingestion, storage, background jobs, audio extraction, transcription, and a transcript review UI. The app does not validate source rights; see `docs/DECISIONS.md` ("Remove Source Rights Gate; Allow YouTube Download") for why, and the risk the user accepts by providing a YouTube URL.
 
 ## Repository Structure
 
@@ -47,17 +47,17 @@ flowchart LR
 - `id`: UUID primary key
 - `project_id`: foreign key to `projects`
 - `title`: text
-- `source_kind`: enum: `local_upload`, `youtube_reference`
-- `source_reference`: nullable text
-- `rights_type`: enum: `owned`, `campaign`, `licensed`, `creator_permission`
-- `rights_reference`: text
+- `source_kind`: enum: `local_upload`, `youtube_url`
+- `source_reference`: nullable text — the original YouTube URL for `youtube_url` sources, null for uploads
 - `duration_ms`: nullable integer
 - `width`: nullable integer
 - `height`: nullable integer
 - `frame_rate`: nullable text
-- `status`: enum: `draft`, `uploaded`, `processing`, `ready`, `failed`
+- `status`: enum: `draft`, `uploaded`, `downloading`, `processing`, `ready`, `failed`
 - `created_at`: timestamp
 - `updated_at`: timestamp
+
+No rights fields. The app does not track or validate source rights — see `docs/DECISIONS.md`.
 
 ### media_assets
 
@@ -75,7 +75,7 @@ flowchart LR
 
 - `id`: UUID primary key
 - `source_video_id`: nullable foreign key to `source_videos`
-- `stage`: enum: `upload_metadata`, `audio_extract`, `transcribe`
+- `stage`: enum: `youtube_download`, `upload_metadata`, `audio_extract`, `transcribe`
 - `state`: enum: `queued`, `processing`, `completed`, `failed`
 - `progress`: integer 0-100
 - `attempts`: integer
@@ -160,7 +160,10 @@ Defined but unused in Phase 1. Candidate scoring starts in Phase 2.
 
 ### SourceProvider
 
-Phase 1 uses local uploads and YouTube references only. YouTube references are metadata/reference records; the system does not download YouTube audiovisual media.
+Phase 1 supports two source kinds: local uploads and YouTube URLs.
+
+- `LocalUploadSourceProvider`: accepts an uploaded file directly.
+- `YouTubeSourceProvider`: downloads the video behind a YouTube URL (e.g. via `yt-dlp`) into a `MediaAsset`, driven by the `youtube_download` job stage. This runs against YouTube's Terms of Service (see `docs/DECISIONS.md`); the app does not validate or claim any right to the content, and the user is responsible for the source.
 
 ## Phase 1 API Endpoints
 
@@ -178,7 +181,7 @@ Phase 1 uses local uploads and YouTube references only. YouTube references are m
 ### Source Videos
 
 - `POST /projects/{project_id}/sources`
-- Creates a source video record. For uploads, requires `rights_type` and `rights_reference`.
+- Creates a source video record, either `source_kind: local_upload` (awaiting a follow-up upload) or `source_kind: youtube_url` (with a `source_reference` URL, which enqueues the `youtube_download` stage immediately).
 - `GET /projects/{project_id}/sources/{source_video_id}`
 - `GET /projects/{project_id}/sources/{source_video_id}/assets`
 
@@ -186,7 +189,7 @@ Phase 1 uses local uploads and YouTube references only. YouTube references are m
 
 - `POST /projects/{project_id}/sources/{source_video_id}/upload`
 - Accepts MP4 fixture and later configured formats.
-- Validates format, size, and rights fields.
+- Validates format and size only. No rights fields are collected or checked.
 - Stores an original `MediaAsset` with a generated asset ID.
 - Enqueues metadata/audio/transcription stages.
 
@@ -209,14 +212,14 @@ Phase 1 uses local uploads and YouTube references only. YouTube references are m
 
 ### Project Detail
 
-- Upload form with rights type and rights reference.
+- Add-source form: upload a local file, or paste a YouTube URL.
 - Source list with processing state.
 - Job status polling.
 
 ### Source Detail
 
 - Video player.
-- Metadata and rights record.
+- Metadata (source kind, original YouTube URL if applicable).
 - Transcript panel with clickable timestamps that seek the player.
 - Processing errors and retry action.
 

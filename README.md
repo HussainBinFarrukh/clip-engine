@@ -6,7 +6,7 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T03 Upload, rights validation, and storage.
+Current task: T03 Upload, YouTube ingestion, and storage. As of 2026-09-22 the app does not gate on source rights; users can upload local files or provide a YouTube URL to download, and are responsible for the legality of what they provide (see `docs/DECISIONS.md`).
 
 T02 (Scaffold) is done. The monorepo, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, tests, and a 45-second speech MP4 fixture are all in place. `docker compose up` serves the web page and API health check, the no-op job runs, and all test suites pass.
 

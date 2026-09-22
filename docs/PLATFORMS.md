@@ -48,4 +48,4 @@ Use this file as a working product reference, not a substitute for official docu
 ## Internal Pacing Guidance
 
 - Recommended pacing: 2-4 posts per account per day unless platform analytics and account health justify a different schedule.
-- Publishing must remain blocked unless source rights, commentary QA, render QA, and human approval all pass.
+- Publishing must remain blocked unless commentary QA, render QA, and human approval all pass. Source rights are not app-enforced (see `docs/DECISIONS.md`, "Remove Source Rights Gate; Allow YouTube Download") — the user is responsible for source legality.

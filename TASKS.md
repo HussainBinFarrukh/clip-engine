@@ -51,19 +51,21 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 
 **Out of scope:** Domain tables and features.
 
-### T03: Upload, rights validation and storage · status: todo
+### T03: Upload, YouTube ingestion and storage · status: todo
 **Build:**
-- Project and SourceVideo tables, including `rights_type` and `rights_reference`, plus MediaAsset.
+- Project and SourceVideo tables (`source_kind`: `local_upload` or `youtube_url`), plus MediaAsset. No rights fields.
 - `StorageProvider` with a local-disk adapter.
 - Upload endpoint with format and size validation, a generated asset ID, and ffprobe metadata.
-- Project page with an upload form.
+- `YouTubeSourceProvider` that downloads a given YouTube URL (e.g. via `yt-dlp`) into a MediaAsset via the `youtube_download` job stage.
+- Project page with an add-source form: local file upload, or a YouTube URL field.
 
 **Accept:**
 - Uploading the fixture stores the original and its metadata.
-- Uploads missing rights fields and unsupported formats are rejected.
+- Uploads with unsupported formats are rejected.
+- Submitting a YouTube URL downloads the video and stores it as a MediaAsset.
 - No filesystem paths appear in API responses.
 
-**Out of scope:** Processing.
+**Out of scope:** Processing beyond storing the original; rights tracking (intentionally removed, see `docs/DECISIONS.md`).
 
 ### T04: Job system · status: todo
 **Build:**
@@ -166,13 +168,11 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 - FFmpeg cut to 9:16, 1:1 and 16:9 with a center crop.
 - h264_nvenc when available, otherwise x264.
 - Signed download URLs.
-- Render is blocked when the source's rights record is missing.
 
 **Accept:**
 - Renders of the fixture play correctly at each aspect ratio.
-- A render with the rights record missing fails with a clear error.
 
-**Out of scope:** Face tracking, captions.
+**Out of scope:** Face tracking, captions. Rights checks are intentionally out of scope for the whole project (see `docs/DECISIONS.md`).
 
 ### T12: Face-tracked reframe · status: todo
 **Build:**
@@ -235,7 +235,6 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 - Loudness.
 - Black frames and silence.
 - Caption coverage.
-- A rights record present.
 - A commentary segment of at least 5 s containing speech.
 - An optional LLM policy check.
 

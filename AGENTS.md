@@ -16,8 +16,8 @@ Build incrementally. Each phase must be working software. Design so later phases
 
 ## Non-negotiable content rules
 
-1. **Authorized sources only.** Every `SourceVideo` has a rights record: `rights_type` (owned, campaign, licensed, creator_permission) and `rights_reference` (campaign ID, license ID, or written-permission reference). Rendering is blocked when the rights record is missing.
-2. **No downloading from YouTube.** YouTube's API Developer Policies and Terms of Service prohibit downloading or storing YouTube audiovisual content without approval. A YouTube URL may be stored for metadata and reference only. Do not add yt-dlp or any equivalent.
+1. **Source is user-provided, no rights gate in-app.** A `SourceVideo` is created either from a local upload or a YouTube URL. The app does not collect, validate, or block on rights metadata — the user is solely responsible for having the rights to any source they provide. This is a deliberate, explicit product decision (see `docs/DECISIONS.md`, 2026-09-22), not an oversight; do not reintroduce a rights gate without a matching decision entry.
+2. **YouTube downloading is allowed, at the user's own risk.** YouTube URLs may be downloaded via a `YouTubeSourceProvider` (e.g. `yt-dlp`) for local processing. This runs against YouTube's Terms of Service and API Developer Policies as of 2026-09-21 — the user has accepted that risk for their own use. Never present this as officially sanctioned, never auto-publish YouTube-sourced footage without the human approval step in rule 4, and do not build features that make bulk/automated scraping easier than the user explicitly asking for one video at a time.
 3. **Original commentary is core, not decoration.** Each clip is paired with a segment of my own recorded reaction or commentary. The reaction recording is a first-class entity. QA flags any clip whose commentary segment is missing, under 5 seconds, or has no speech.
 4. **Human approval before publishing.** No clip is published without an explicit approval state set by a person.
 
@@ -61,7 +61,7 @@ Candidate generation targets presets, not one range. A strong moment may yield c
 
 ## Domain model (grow into it; create tables only when their phase needs them)
 
-User, Workspace, Project, SourceVideo (with rights fields), MediaAsset, Transcript, TranscriptWord, TranscriptSegment, ReactionSession, ReactionSegment, ClipCandidate (with features), Clip, RenderJob, RenderedAsset, PlatformAccount, PublishJob, SocialPost, PerformanceMetric, AIAnalysis.
+User, Workspace, Project, SourceVideo, MediaAsset, Transcript, TranscriptWord, TranscriptSegment, ReactionSession, ReactionSegment, ClipCandidate (with features), Clip, RenderJob, RenderedAsset, PlatformAccount, PublishJob, SocialPost, PerformanceMetric, AIAnalysis.
 
 ## Definition of done for any task
 

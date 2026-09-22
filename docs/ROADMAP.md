@@ -6,7 +6,7 @@ This roadmap mirrors `TASKS.md`. Build one task at a time, in order.
 
 - T01: Architecture and docs.
 - T02: Scaffold monorepo, Docker Compose, health endpoint, web shell, worker, Alembic, test tooling, fixture.
-- T03: Upload, rights validation, and storage.
+- T03: Upload, YouTube ingestion, and storage.
 - T04: Job system.
 - T05: Audio extraction and transcription.
 
@@ -45,7 +45,8 @@ This roadmap mirrors `TASKS.md`. Build one task at a time, in order.
 
 ## Current Status
 
-- Current task: T03 Upload, rights validation, and storage.
+- Current task: T03 Upload, YouTube ingestion, and storage.
+- 2026-09-22 scope change: the source-rights gate was removed at explicit product direction, and YouTube URL download is now in scope (via a `YouTubeSourceProvider`, e.g. `yt-dlp`). This knowingly runs against YouTube's Terms of Service; the user is responsible for source legality. See `docs/DECISIONS.md`.
 - T01 docs exist: `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/DECISIONS.md`, and `docs/PLATFORMS.md`.
 - T01 is complete.
 - T02 is complete. The monorepo scaffold, Docker Compose stack (web, api, worker, postgres, redis), FastAPI health endpoint, Next.js shell, Dramatiq no-op worker with a Compose smoke producer, Alembic setup, lint/format/test tooling, and a 45-second speech MP4 fixture all exist and pass acceptance.
