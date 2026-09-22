@@ -305,10 +305,23 @@ Per preset, the `candidate_scoring` stage:
 - `hook_line`, `self_contained`, `emotional_peak`: boolean
 - `quotable_line`: nullable text
 - `reason`: text
+- `transcript_excerpt`: text (the exact text sent to the LLM for this window)
 - `feature_vector`: JSON (the heuristic sub-features used)
 - `model`, `prompt_name`: text
 - `prompt_version`: integer
+- `review_status`: enum: `pending`, `accepted`, `rejected` (T10)
 - `created_at`: timestamp
+
+## Candidate Review (Phase 2, T10)
+
+- `PATCH /projects/{project_id}/sources/{source_video_id}/candidates/{candidate_id}`
+- Body: any of `start_ms`+`end_ms` (both together), `review_status`. Adjusted times must each land exactly on a transcript sentence boundary (same rule T07's window generation itself follows) and the resulting duration must still fit the candidate's preset — both checked against the live transcript/`CLIP_PRESETS`, not just accepted as given. Returns the updated `ClipCandidateRead`.
+- `GET /projects/{project_id}/sources/{source_video_id}/candidates/{candidate_id}/thumbnail`
+- Grabs a single JPEG frame from the original video at the candidate's current `start_ms` via ffmpeg (`app/services/ffmpeg.py`'s `extract_thumbnail_jpeg`), generated on demand, not persisted — reflects whatever `start_ms` is currently saved, including after a time adjustment.
+
+### Source Detail UI
+
+Adds a Candidates panel (below Signals): a "Score candidates" / "Re-score candidates" trigger, then one card per `ClipCandidate` (ranked, matching the API order) with its thumbnail, preset, review status, combined score, transcript excerpt, reason, and quotable line. Each card has a Preview button (seeks the shared video player — `lib/video-player.ts`'s `seekVideoPlayer`, also now used by the Transcript panel — to the candidate's current `start_ms`), start/end `<select>` dropdowns populated only with real transcript sentence boundaries (so the UI cannot submit an invalid, non-snapped time — the same guarantee the server enforces, just also enforced client-side by construction), and Accept/Reject buttons.
 
 Re-scoring the same `(source_video, preset, prompt_name, prompt_version)` replaces those rows (idempotent retry). Scoring under a *new* `prompt_version` adds alongside old rows rather than replacing them — old results survive a prompt change, which is what lets the learning loop (`AGENTS.md`) eventually compare prompt versions against each other. See `docs/DECISIONS.md`.
 

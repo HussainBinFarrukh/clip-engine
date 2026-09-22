@@ -1,11 +1,29 @@
+import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+
+class ReviewStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 class ClipCandidate(Base):
@@ -36,12 +54,17 @@ class ClipCandidate(Base):
     emotional_peak: Mapped[bool] = mapped_column(Boolean)
     quotable_line: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str] = mapped_column(Text)
+    transcript_excerpt: Mapped[str] = mapped_column(Text)
 
     feature_vector: Mapped[dict] = mapped_column(JSON)
 
     model: Mapped[str] = mapped_column(String(100))
     prompt_name: Mapped[str] = mapped_column(String(100))
     prompt_version: Mapped[int] = mapped_column(Integer)
+
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus, native_enum=False, length=16), default=ReviewStatus.PENDING
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

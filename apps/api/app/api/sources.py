@@ -3,7 +3,7 @@ import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,11 +17,17 @@ from app.models.project import Project
 from app.models.signal import Signal
 from app.models.source_video import SourceKind, SourceVideo, SourceVideoStatus
 from app.models.transcript import Transcript
-from app.schemas.clip_candidate import ClipCandidateRead, ScoreCandidatesRequest
+from app.schemas.clip_candidate import (
+    ClipCandidateRead,
+    ClipCandidateUpdate,
+    ScoreCandidatesRequest,
+)
 from app.schemas.media_asset import MediaAssetRead
 from app.schemas.signal import SignalRead
 from app.schemas.source_video import SourceVideoCreate, SourceVideoRead
 from app.schemas.transcript import TranscriptRead
+from app.services.clip_presets import CLIP_PRESETS
+from app.services.ffmpeg import FFmpegError, extract_thumbnail_jpeg
 from app.services.job_queue import dispatch_job
 from app.services.jobs import enqueue_job
 from app.services.storage import StorageProvider, get_storage_provider
@@ -333,6 +339,98 @@ def list_source_candidates(
             .order_by(ClipCandidate.combined_score.desc())
         )
     )
+
+
+@router.patch("/{source_video_id}/candidates/{candidate_id}", response_model=ClipCandidateRead)
+def update_source_candidate(
+    project_id: uuid.UUID,
+    source_video_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    payload: ClipCandidateUpdate,
+    db: Session = Depends(get_db),
+) -> ClipCandidate:
+    _get_source_or_404(db, project_id, source_video_id)
+    candidate = db.get(ClipCandidate, candidate_id)
+    if candidate is None or candidate.source_video_id != source_video_id:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if payload.start_ms is not None and payload.end_ms is not None:
+        transcript = db.scalars(
+            select(Transcript)
+            .where(Transcript.source_video_id == source_video_id)
+            .order_by(Transcript.created_at.desc())
+        ).first()
+        if transcript is None:
+            raise HTTPException(
+                status_code=400, detail="No transcript to validate sentence boundaries against"
+            )
+
+        boundary_starts = {segment.start_ms for segment in transcript.segments}
+        boundary_ends = {segment.end_ms for segment in transcript.segments}
+        if payload.start_ms not in boundary_starts or payload.end_ms not in boundary_ends:
+            raise HTTPException(
+                status_code=400,
+                detail="start_ms and end_ms must each land exactly on a sentence boundary",
+            )
+
+        preset = CLIP_PRESETS.get(candidate.preset)
+        duration = payload.end_ms - payload.start_ms
+        duration_in_bounds = (
+            preset is None or preset.min_duration_ms <= duration <= preset.max_duration_ms
+        )
+        if not duration_in_bounds:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Adjusted duration must stay within {candidate.preset}'s bounds",
+            )
+
+        candidate.start_ms = payload.start_ms
+        candidate.end_ms = payload.end_ms
+
+    if payload.review_status is not None:
+        candidate.review_status = payload.review_status
+
+    db.commit()
+    db.refresh(candidate)
+    return candidate
+
+
+@router.get("/{source_video_id}/candidates/{candidate_id}/thumbnail")
+def get_candidate_thumbnail(
+    project_id: uuid.UUID,
+    source_video_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage_provider),
+) -> Response:
+    _get_source_or_404(db, project_id, source_video_id)
+    candidate = db.get(ClipCandidate, candidate_id)
+    if candidate is None or candidate.source_video_id != source_video_id:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    original = db.scalars(
+        select(MediaAsset)
+        .where(
+            MediaAsset.source_video_id == source_video_id,
+            MediaAsset.asset_kind == AssetKind.ORIGINAL_VIDEO,
+        )
+        .order_by(MediaAsset.created_at.desc())
+        .limit(1)
+    ).first()
+    if original is None:
+        raise HTTPException(status_code=404, detail="Original video not found")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        thumb_path = Path(tmp_dir) / "thumb.jpg"
+        try:
+            extract_thumbnail_jpeg(
+                storage.resolve_path(original.storage_key), thumb_path, candidate.start_ms
+            )
+        except FFmpegError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        image_bytes = thumb_path.read_bytes()
+
+    return Response(content=image_bytes, media_type="image/jpeg")
 
 
 @transcript_router.get("/{source_video_id}/transcript", response_model=TranscriptRead)

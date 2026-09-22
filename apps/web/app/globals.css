@@ -240,3 +240,76 @@ a {
   font-size: 0.75rem;
   margin-top: 4px;
 }
+
+.candidate-list {
+  display: grid;
+  gap: 16px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.candidate-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+}
+
+.candidate-thumbnail {
+  background: var(--background);
+  border-radius: 4px;
+  flex-shrink: 0;
+  height: 90px;
+  object-fit: cover;
+  width: 160px;
+}
+
+.candidate-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.candidate-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.candidate-excerpt {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-times {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.candidate-times label {
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  gap: 2px;
+}
+
+.candidate-times select {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 6px;
+}
+
+.candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -1,16 +1,16 @@
+import { CandidatesPanel } from "../../../../../components/CandidatesPanel";
 import { JobsPanel } from "../../../../../components/JobsPanel";
 import { SignalsPanel } from "../../../../../components/SignalsPanel";
-import {
-  TranscriptPanel,
-  VIDEO_PLAYER_ELEMENT_ID,
-} from "../../../../../components/TranscriptPanel";
+import { TranscriptPanel } from "../../../../../components/TranscriptPanel";
 import {
   getSource,
   getTranscript,
   listSourceAssets,
+  listSourceCandidates,
   listSourceSignals,
 } from "../../../../../lib/api";
 import { BROWSER_API_BASE_URL } from "../../../../../lib/browser-api";
+import { VIDEO_PLAYER_ELEMENT_ID } from "../../../../../lib/video-player";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +20,12 @@ export default async function SourceDetailPage({
   params: Promise<{ id: string; sourceId: string }>;
 }) {
   const { id, sourceId } = await params;
-  const [source, assets, transcript, signals] = await Promise.all([
+  const [source, assets, transcript, signals, candidates] = await Promise.all([
     getSource(id, sourceId),
     listSourceAssets(id, sourceId),
     getTranscript(sourceId),
     listSourceSignals(id, sourceId),
+    listSourceCandidates(id, sourceId),
   ]);
 
   const videoAsset = assets.find(
@@ -82,6 +83,14 @@ export default async function SourceDetailPage({
           sourceStatus={source.status}
           durationMs={source.duration_ms}
           signals={signals}
+        />
+
+        <CandidatesPanel
+          projectId={id}
+          sourceId={sourceId}
+          sourceStatus={source.status}
+          transcript={transcript}
+          candidates={candidates}
         />
 
         <JobsPanel projectId={id} sourceId={sourceId} />

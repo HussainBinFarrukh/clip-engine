@@ -1,5 +1,5 @@
 from app.models.ai_analysis import AIAnalysis
-from app.models.clip_candidate import ClipCandidate
+from app.models.clip_candidate import ClipCandidate, ReviewStatus
 from app.models.job import Job, JobStage, JobState
 from app.models.media_asset import AssetKind, MediaAsset
 from app.models.project import Project
@@ -16,6 +16,7 @@ __all__ = [
     "JobState",
     "MediaAsset",
     "Project",
+    "ReviewStatus",
     "Signal",
     "SignalType",
     "SourceKind",

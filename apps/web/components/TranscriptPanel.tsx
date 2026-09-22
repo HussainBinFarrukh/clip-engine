@@ -5,13 +5,13 @@ import { useState } from "react";
 
 import type { Transcript, SourceVideoStatus } from "../lib/api";
 import { BROWSER_API_BASE_URL } from "../lib/browser-api";
+import { seekVideoPlayer } from "../lib/video-player";
 
 const TRANSCRIBABLE_STATUSES: SourceVideoStatus[] = [
   "uploaded",
   "ready",
   "failed",
 ];
-export const VIDEO_PLAYER_ELEMENT_ID = "source-video-player";
 
 export function TranscriptPanel({
   projectId,
@@ -50,15 +50,6 @@ export function TranscriptPanel({
     }
   }
 
-  function seekTo(startMs: number) {
-    const player = document.getElementById(
-      VIDEO_PLAYER_ELEMENT_ID,
-    ) as HTMLVideoElement | null;
-    if (!player) return;
-    player.currentTime = startMs / 1000;
-    player.play();
-  }
-
   return (
     <div className="panel">
       <p className="eyebrow">Transcript</p>
@@ -87,7 +78,7 @@ export function TranscriptPanel({
                   key={word.id}
                   type="button"
                   className="transcript-word"
-                  onClick={() => seekTo(word.start_ms)}
+                  onClick={() => seekVideoPlayer(word.start_ms)}
                   title={`${(word.start_ms / 1000).toFixed(1)}s`}
                 >
                   {word.word}{" "}

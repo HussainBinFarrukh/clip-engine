@@ -159,14 +159,16 @@ Dedup runs as non-maximum suppression on heuristic score, *before* any LLM call 
 
 **Out of scope:** UI beyond the API.
 
-### T10: Candidate review UI · status: todo
+### T10: Candidate review UI · status: done
 **Build:**
 - Candidate list with thumbnail, start and end times, duration, preset, transcript excerpt, score and reason.
 - In-player preview by seeking.
 - Start and end adjustment with sentence snapping.
 - Accept or reject per candidate.
 
-**Accept:** Adjusting a candidate's times persists them, and the change shows in the preview.
+Thumbnails are generated on demand via ffmpeg (not persisted — always reflects the current `start_ms`, including after an edit). Time adjustment is offered via `<select>` dropdowns populated only from real transcript sentence boundaries (can't submit an invalid time by construction), and independently re-validated server-side against the live transcript and preset bounds. See `docs/DECISIONS.md`.
+
+**Accept:** Adjusting a candidate's times persists them, and the change shows in the preview. Verified via the API test suite (`test_candidate_review.py`: PATCH persists and is visible on refetch) and structurally in the UI (Preview always seeks to the candidate's *currently persisted* `start_ms`, so a saved edit is what the next preview shows).
 **Out of scope:** Rendering.
 
 ---

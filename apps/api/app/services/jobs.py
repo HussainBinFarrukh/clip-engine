@@ -456,6 +456,7 @@ def _run_candidate_scoring_stage(db: Session, job: Job) -> dict:
                     emotional_peak=score.emotional_peak,
                     quotable_line=score.quotable_line,
                     reason=score.reason,
+                    transcript_excerpt=transcript_text,
                     feature_vector={
                         "avg_loudness_dbfs": features.avg_loudness_dbfs,
                         "pause_ratio": features.pause_ratio,

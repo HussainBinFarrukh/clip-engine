@@ -48,7 +48,8 @@ export type JobStage =
   | "youtube_download"
   | "audio_extract"
   | "transcribe"
-  | "signal_extraction";
+  | "signal_extraction"
+  | "candidate_scoring";
 export type JobState = "queued" | "processing" | "completed" | "failed";
 
 export type Job = {
@@ -117,6 +118,31 @@ export type Signal = {
   created_at: string;
 };
 
+export type ReviewStatus = "pending" | "accepted" | "rejected";
+
+export type ClipCandidate = {
+  id: string;
+  source_video_id: string;
+  preset: string;
+  start_ms: number;
+  end_ms: number;
+  heuristic_score: number;
+  llm_score: number;
+  combined_score: number;
+  hook_line: boolean;
+  self_contained: boolean;
+  emotional_peak: boolean;
+  quotable_line: string | null;
+  reason: string;
+  transcript_excerpt: string;
+  feature_vector: Record<string, unknown>;
+  model: string;
+  prompt_name: string;
+  prompt_version: number;
+  review_status: ReviewStatus;
+  created_at: string;
+};
+
 function serverApiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:8000";
 }
@@ -169,6 +195,15 @@ export function listSourceSignals(
 ): Promise<Signal[]> {
   return serverJson<Signal[]>(
     `/projects/${projectId}/sources/${sourceId}/signals`,
+  );
+}
+
+export function listSourceCandidates(
+  projectId: string,
+  sourceId: string,
+): Promise<ClipCandidate[]> {
+  return serverJson<ClipCandidate[]>(
+    `/projects/${projectId}/sources/${sourceId}/candidates`,
   );
 }
 
