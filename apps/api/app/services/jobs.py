@@ -9,12 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.models.job import Job, JobStage, JobState
 from app.models.media_asset import AssetKind, MediaAsset
+from app.models.signal import Signal, SignalType
 from app.models.source_video import SourceVideo, SourceVideoStatus
 from app.models.transcript import Transcript, TranscriptSegment, TranscriptWord
 from app.services.ffmpeg import extract_audio_16k_mono_wav
 from app.services.ffprobe import probe_video
 from app.services.ingest import store_original_video
 from app.services.job_queue import dispatch_job as _default_dispatch_job
+from app.services.signals import (
+    compute_loudness_rms,
+    compute_pauses,
+    compute_scene_changes,
+    compute_speech_rate,
+)
 from app.services.storage import get_storage_provider
 from app.services.transcriber import TranscriptResult, get_transcriber
 from app.services.youtube import get_youtube_provider
@@ -230,12 +237,79 @@ def _run_transcribe_stage(db: Session, job: Job) -> dict:
     }
 
 
+def _save_signal(
+    db: Session, source_video_id: uuid.UUID, signal_type: SignalType, unit: str, points: list[dict]
+) -> Signal:
+    # Delete-then-insert, same idempotency pattern as _save_transcript: no
+    # duplicate series pile up across retries or re-runs.
+    existing = db.scalars(
+        select(Signal).where(
+            Signal.source_video_id == source_video_id, Signal.signal_type == signal_type
+        )
+    ).all()
+    for old in existing:
+        db.delete(old)
+    db.flush()
+
+    signal = Signal(
+        source_video_id=source_video_id, signal_type=signal_type, unit=unit, points_json=points
+    )
+    db.add(signal)
+    return signal
+
+
+def _run_signal_extraction_stage(db: Session, job: Job) -> dict:
+    source_video = db.get(SourceVideo, job.source_video_id)
+    if source_video is None:
+        raise ValueError("source video not found")
+
+    transcript = db.scalars(
+        select(Transcript)
+        .where(Transcript.source_video_id == source_video.id)
+        .order_by(Transcript.created_at.desc())
+    ).first()
+    if transcript is None:
+        raise ValueError("source video has no transcript yet")
+
+    segments = [
+        {
+            "start_ms": segment.start_ms,
+            "end_ms": segment.end_ms,
+            "words": [{"start_ms": w.start_ms, "end_ms": w.end_ms} for w in segment.words],
+        }
+        for segment in transcript.segments
+    ]
+    words = [word for segment in segments for word in segment["words"]]
+
+    storage = get_storage_provider()
+    original = _latest_asset(db, source_video.id, AssetKind.ORIGINAL_VIDEO)
+    audio = _latest_asset(db, source_video.id, AssetKind.EXTRACTED_AUDIO)
+
+    loudness = compute_loudness_rms(storage.resolve_path(audio.storage_key))
+    scene_changes = compute_scene_changes(storage.resolve_path(original.storage_key))
+    pauses = compute_pauses(words)
+    speech_rate = compute_speech_rate(segments)
+
+    _save_signal(db, source_video.id, SignalType.LOUDNESS_RMS, "dbfs", loudness)
+    _save_signal(db, source_video.id, SignalType.SCENE_CHANGE, "event", scene_changes)
+    _save_signal(db, source_video.id, SignalType.PAUSE, "ms", pauses)
+    _save_signal(db, source_video.id, SignalType.SPEECH_RATE, "wpm", speech_rate)
+
+    return {
+        "loudness_points": len(loudness),
+        "scene_changes": len(scene_changes),
+        "pauses": len(pauses),
+        "speech_rate_points": len(speech_rate),
+    }
+
+
 _STAGE_HANDLERS: dict[JobStage, StageHandler] = {
     JobStage.TEST_STAGE: _run_test_stage,
     JobStage.UPLOAD_METADATA: _run_upload_metadata_stage,
     JobStage.YOUTUBE_DOWNLOAD: _run_youtube_download_stage,
     JobStage.AUDIO_EXTRACT: _run_audio_extract_stage,
     JobStage.TRANSCRIBE: _run_transcribe_stage,
+    JobStage.SIGNAL_EXTRACTION: _run_signal_extraction_stage,
 }
 
 

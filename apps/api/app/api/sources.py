@@ -13,9 +13,11 @@ from app.db.session import get_db
 from app.models.job import JobStage
 from app.models.media_asset import AssetKind, MediaAsset
 from app.models.project import Project
+from app.models.signal import Signal
 from app.models.source_video import SourceKind, SourceVideo, SourceVideoStatus
 from app.models.transcript import Transcript
 from app.schemas.media_asset import MediaAssetRead
+from app.schemas.signal import SignalRead
 from app.schemas.source_video import SourceVideoCreate, SourceVideoRead
 from app.schemas.transcript import TranscriptRead
 from app.services.job_queue import dispatch_job
@@ -248,6 +250,36 @@ def transcribe_source_video(
     dispatch_job(job.id)
 
     return response
+
+
+@router.post("/{source_video_id}/extract-signals", response_model=SourceVideoRead)
+def extract_source_signals(
+    project_id: uuid.UUID,
+    source_video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> SourceVideoRead:
+    source_video = _get_source_or_404(db, project_id, source_video_id)
+
+    if source_video.status != SourceVideoStatus.READY:
+        raise HTTPException(
+            status_code=400,
+            detail="Signal extraction needs a transcript first (source must be 'ready')",
+        )
+
+    response = SourceVideoRead.model_validate(source_video)
+
+    job = enqueue_job(db, stage=JobStage.SIGNAL_EXTRACTION, source_video_id=source_video.id)
+    dispatch_job(job.id)
+
+    return response
+
+
+@router.get("/{source_video_id}/signals", response_model=list[SignalRead])
+def list_source_signals(
+    project_id: uuid.UUID, source_video_id: uuid.UUID, db: Session = Depends(get_db)
+) -> list[Signal]:
+    _get_source_or_404(db, project_id, source_video_id)
+    return list(db.scalars(select(Signal).where(Signal.source_video_id == source_video_id)))
 
 
 @transcript_router.get("/{source_video_id}/transcript", response_model=TranscriptRead)

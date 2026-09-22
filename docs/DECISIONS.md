@@ -71,3 +71,19 @@ The first `faster-whisper` call downloads model weights from Hugging Face Hub at
 ## 2026-09-22: Worker Runs Need a Restart, Not Just a File Change
 
 Unlike the API (uvicorn `--reload` watches the mounted volume), the Dramatiq worker process does not hot-reload — it has whatever Python objects (including enum classes) were in memory when it started. A code change that isn't paired with `docker compose up -d worker` (or an image rebuild, when dependencies changed) leaves the worker running stale code, which surfaces as confusing low-level errors (e.g. a `LookupError` deserializing an enum value the running process's stale `JobStage` doesn't know about) rather than an obvious version mismatch. Restart the worker after any change under `apps/api` or `workers/` that isn't purely test-only.
+
+## 2026-09-22: Signal Extraction Is a Separate, Explicit Stage — Not Auto-Chained from Transcribe
+
+`signal_extraction` (T06: loudness/RMS, scene changes, pauses, speech rate) needs a transcript (for pauses and speech rate) plus the original video and extracted audio, so it can only run after `transcribe` succeeds. It is deliberately *not* auto-chained onto `transcribe` the way `audio_extract` auto-chains into `transcribe` — scene detection (PySceneDetect) is its own real compute cost, and stacking it onto every transcription would make "transcribe this video" silently do more work than asked. `POST /projects/{id}/sources/{id}/extract-signals` is a separate, explicit call, consistent with the T05 decision to keep compute-heavy stages opt-in rather than automatic.
+
+## 2026-09-22: Signals Timeline Chart Lives on Source Detail, Not the Project Page
+
+TASKS.md's T06 accept criterion says the signals timeline should be "visible... on the project page." It's built on the Source Detail page instead: a signal series is per-`source_video`, and the Project Detail page lists *multiple* sources with no single one selected — a chart there would need its own source picker, adding real complexity `T06`'s "Out of scope: scoring" framing didn't ask for, for something the Source Detail page (which already has the player and transcript to correlate the timeline against) does for free. Flagging this as a deliberate reading, not a silent deviation, in case "project page" was intentional for a reason not visible from the task list alone.
+
+## 2026-09-22: RMS Loudness Computed with the Stdlib `wave` Module, Not ffmpeg Filters or a New Library
+
+`audio_extract` already produces a 16kHz mono 16-bit PCM WAV for the transcriber, and that format is trivial to read directly with Python's built-in `wave`/`array` modules — no new dependency, no shelling out to an `ffmpeg` audio-filter pipeline whose text output would need parsing. RMS energy is computed per 200ms window and converted to dBFS, floored at -60dBFS for silence (avoids `log(0)`).
+
+## 2026-09-22: Scene Detection Uses PySceneDetect's `ContentDetector`, Pulls in OpenCV
+
+TASKS.md names PySceneDetect explicitly for T06, so `scenedetect` (plus its `opencv-python-headless` dependency) was added to both `apps/api/requirements.txt` and `workers/requirements.txt` — another sizable download in this environment's slow-network sandbox, mitigated by the pip cache mount added in T05. `ContentDetector` (HSV colorspace delta between frames) is the library's general-purpose default; the T05/T06 test fixture (a static color background) correctly produces zero detected cuts. To confirm that's the expected negative case and not a bug, `compute_scene_changes` was also run against a synthetic 2-scene clip (red 0-2s, blue 2-4s): it correctly detected one cut at `t_ms: 2000`.

@@ -75,7 +75,7 @@ No rights fields. The app does not track or validate source rights — see `docs
 
 - `id`: UUID primary key
 - `source_video_id`: nullable foreign key to `source_videos`
-- `stage`: enum: `test_stage`, `youtube_download`, `upload_metadata`, `audio_extract`, `transcribe`
+- `stage`: enum: `test_stage`, `youtube_download`, `upload_metadata`, `audio_extract`, `transcribe`, `signal_extraction`
 - `state`: enum: `queued`, `processing`, `completed`, `failed`
 - `progress`: integer 0-100
 - `attempts`: integer
@@ -118,6 +118,17 @@ No rights fields. The app does not track or validate source rights — see `docs
 - `word`: text
 - `confidence`: nullable float
 - `word_index`: integer
+
+### signals
+
+- `id`: UUID primary key
+- `source_video_id`: foreign key to `source_videos`
+- `signal_type`: enum: `loudness_rms`, `scene_change`, `pause`, `speech_rate`
+- `unit`: text (`dbfs`, `event`, `ms`, `wpm`)
+- `points_json`: JSON — a list of `{t_ms, ...}` points; shape depends on `signal_type` (see `app/models/signal.py`)
+- `created_at`: timestamp
+
+One row per `(source_video_id, signal_type)` — a whole time series per row, not one row per sample point. Re-running extraction deletes and replaces the four rows for that source, same idempotency pattern as `transcripts`.
 
 ## Job State Machine
 
@@ -207,6 +218,14 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 - `GET /sources/{source_video_id}/transcript`
 - Returns the latest transcript's segments and words with timestamps. 404 if none exists yet.
 
+### Signal Extraction
+
+- `POST /projects/{project_id}/sources/{source_video_id}/extract-signals`
+- Enqueues `signal_extraction` (loudness/RMS, scene changes via PySceneDetect, pauses and speech rate from the stored transcript). Requires the source to already be `ready` (i.e. a transcript exists). Does *not* auto-chain from `transcribe` — see "Job chaining" below.
+- Returns immediately, before the job runs.
+- `GET /projects/{project_id}/sources/{source_video_id}/signals`
+- Returns the four `Signal` time series (empty list if extraction hasn't run yet).
+
 ### Jobs
 
 - `GET /jobs/{job_id}`
@@ -215,7 +234,7 @@ Phase 1 supports two source kinds: local uploads and YouTube URLs.
 
 #### Job chaining
 
-Most stages are triggered explicitly (upload → `upload_metadata`, a YouTube URL → `youtube_download`, the transcribe endpoint → `audio_extract`). One pair auto-chains: `audio_extract` enqueues `transcribe` itself on success, because they're really one user-facing action ("transcribe this video") split into two idempotent, separately-retryable stages. Upload/download do *not* auto-chain into `audio_extract` — transcription is compute-heavy, so it only runs when explicitly requested, not on every upload (see `docs/DECISIONS.md`).
+Most stages are triggered explicitly (upload → `upload_metadata`, a YouTube URL → `youtube_download`, the transcribe endpoint → `audio_extract`, the extract-signals endpoint → `signal_extraction`). One pair auto-chains: `audio_extract` enqueues `transcribe` itself on success, because they're really one user-facing action ("transcribe this video") split into two idempotent, separately-retryable stages. Upload/download do *not* auto-chain into `audio_extract`, and `transcribe` does not auto-chain into `signal_extraction` — each is compute-heavy, so it only runs when explicitly requested (see `docs/DECISIONS.md`).
 
 ## Phase 1 UI Pages
 
@@ -234,6 +253,7 @@ Most stages are triggered explicitly (upload → `upload_metadata`, a YouTube UR
 - Metadata (source kind, original YouTube URL if applicable).
 - Job status polling (stage, state, error) with a retry action on failed jobs.
 - Transcript panel with clickable timestamps that seek the player.
+- Signals timeline: loudness, speech rate, scene changes, and pauses over time (small multiples sharing a time axis), with an "Extract signals" trigger once the source is `ready`. TASKS.md names the "project page" for this; it lives on Source Detail instead because a signal series is per-source, and this page already has the player/transcript it's most useful alongside — see `docs/DECISIONS.md`.
 
 ## Local Development Setup
 

@@ -6,7 +6,9 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T06 Signal extraction.
+Current task: T07 Candidate windows.
+
+T06 (Signal extraction) is done. Once a source has a transcript, `POST .../extract-signals` computes loudness/RMS, scene changes (PySceneDetect), pauses, and speech rate, shown as a timeline chart on the Source Detail page (not the top-level Project page TASKS.md names — a per-source chart didn't fit there without a source picker; documented in `docs/DECISIONS.md`).
 
 T05 (Audio extraction and transcription) is done, with one accept check unverified in this environment (no GPU, no natural-speech test fixture — documented in `docs/DECISIONS.md`, not silently skipped). Requesting a transcript (`POST .../transcribe`) extracts 16kHz mono audio and runs faster-whisper with word-level timestamps; the Source Detail page shows a clickable transcript that seeks the video player.
 

@@ -2,6 +2,13 @@
 
 This roadmap mirrors `TASKS.md`. Build one task at a time, in order.
 
+## To Revisit
+
+Known gaps worth a deliberate second pass, not silently dropped:
+
+- **T05 word-timestamp precision (~100ms accept bar unmet).** No GPU here → `faster-whisper` runs `tiny` on CPU, not `large-v3`. The synthetic SAPI test fixture also has unnaturally large inter-word pauses that are out-of-distribution for Whisper's alignment (confirmed by investigation, not assumed) — see `docs/DECISIONS.md`, "Fixture Gets Real Ground-Truth Word Timestamps...". **Before T13** (captions need tight audio sync): swap the fixture for a real recorded human-speech sample, and re-test against `large-v3` once GPU is available (or accept `tiny`'s precision as a deliberate product tradeoff and document that instead).
+- **T06 signals chart placement.** Built on Source Detail, not the literal "project page" TASKS.md names — a signal series is per-source, and Project Detail lists multiple sources with none selected. If "project page" was intentional (e.g. a cross-source overview), that's a different, bigger feature — revisit if it turns out to matter. See `docs/DECISIONS.md`.
+
 ## Phase 1: Ingest and Transcribe
 
 - T01: Architecture and docs.
@@ -45,7 +52,8 @@ This roadmap mirrors `TASKS.md`. Build one task at a time, in order.
 
 ## Current Status
 
-- Current task: T06 Signal extraction.
+- Current task: T07 Candidate windows.
+- T06 is complete. `Signal` rows (one per `(source_video, signal_type)`, `points_json` time series) store loudness/RMS (stdlib `wave` module, 200ms windows, dBFS), scene changes (PySceneDetect `ContentDetector`, verified against both a static-background clip — 0 cuts — and a synthetic 2-scene clip — 1 correctly-placed cut), pauses (≥300ms gaps between transcript words), and speech rate (words/minute per transcript segment). `POST /projects/{id}/sources/{id}/extract-signals` enqueues `signal_extraction`, requires the source to be `ready` (transcript exists); re-extracting deletes and replaces the four series (no duplicates, verified). Sentence boundaries are the `speech_rate` points' own timestamps, not a separate series. Source Detail shows a small-multiples SVG timeline (shared time axis, dataviz-skill-validated dark-mode palette, hover crosshair) instead of the literal "project page" TASKS.md names — documented deviation, see `docs/DECISIONS.md`. 24 API tests + 3 worker tests pass.
 - 2026-09-22 scope change: the source-rights gate was removed at explicit product direction, and YouTube URL download is now in scope (via a `YouTubeSourceProvider`, e.g. `yt-dlp`). This knowingly runs against YouTube's Terms of Service; the user is responsible for source legality. See `docs/DECISIONS.md`.
 - T03 is complete. `Project`, `SourceVideo` (no rights fields), and `MediaAsset` tables exist with an Alembic migration. `LocalDiskStorageProvider` stores originals; API responses never expose `storage_key` or filesystem paths.
 - T04 is complete. A generic `Job` table (stage, state, progress, attempts, error fields, input/output JSON) backs a stage-runner (`app.services.jobs.execute_job`) that persists the "processing" state and incremented attempt count before running a stage, and rolls back partial writes on failure so a retry starts clean. The upload and YouTube-download flows from T03 were refactored onto this system: uploading now stores the file synchronously but runs ffprobe as an `upload_metadata` job, and both endpoints return a response snapshot taken *before* dispatch, so the "API returns before any stage runs" contract holds regardless of dispatch timing. `POST /jobs/{id}/retry` reruns a failed job; `GET /jobs/{id}` and `GET /projects/{id}/jobs` expose status. The worker container now shares the API's code (read-only mount + `PYTHONPATH`, see `docs/DECISIONS.md`) so `run_job_stage` executes the same stage handlers the API enqueues — verified against the real Redis/worker pipeline, including a genuine YouTube-download failure and retry. A `test_stage` (fails a configurable number of attempts, then succeeds) demonstrates the retry mechanism deterministically in `apps/api/tests/test_jobs.py`. Web's Source Detail page polls `GET /projects/{id}/jobs` every 3s and shows a Retry button on failed jobs. 16 API tests + 3 worker tests pass, plus web test/lint/format.

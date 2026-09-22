@@ -47,7 +47,8 @@ export type JobStage =
   | "upload_metadata"
   | "youtube_download"
   | "audio_extract"
-  | "transcribe";
+  | "transcribe"
+  | "signal_extraction";
 export type JobState = "queued" | "processing" | "completed" | "failed";
 
 export type Job = {
@@ -95,6 +96,27 @@ export type Transcript = {
   segments: TranscriptSegment[];
 };
 
+export type SignalType =
+  | "loudness_rms"
+  | "scene_change"
+  | "pause"
+  | "speech_rate";
+
+export type SignalPoint = {
+  t_ms: number;
+  value?: number;
+  duration_ms?: number;
+};
+
+export type Signal = {
+  id: string;
+  source_video_id: string;
+  signal_type: SignalType;
+  unit: string;
+  points_json: SignalPoint[];
+  created_at: string;
+};
+
 function serverApiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:8000";
 }
@@ -139,6 +161,15 @@ export function listSourceAssets(
 
 export function listProjectJobs(projectId: string): Promise<Job[]> {
   return serverJson<Job[]>(`/projects/${projectId}/jobs`);
+}
+
+export function listSourceSignals(
+  projectId: string,
+  sourceId: string,
+): Promise<Signal[]> {
+  return serverJson<Signal[]>(
+    `/projects/${projectId}/sources/${sourceId}/signals`,
+  );
 }
 
 export async function getTranscript(

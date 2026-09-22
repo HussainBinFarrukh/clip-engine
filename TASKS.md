@@ -98,7 +98,7 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 
 ## Phase 2: Candidate generation
 
-### T06: Signal extraction · status: todo
+### T06: Signal extraction · status: done
 **Build:** Per-source signals stored as time series:
 - Loudness and RMS energy.
 - Scene changes, via PySceneDetect.
@@ -106,6 +106,11 @@ Ordered task list for the whole build. `AGENTS.md` holds the standing rules; thi
 - Speech rate.
 
 **Accept:** Signals are stored for the fixture and visible as a simple timeline chart on the project page.
+
+Sentence boundaries aren't a separate stored signal — they're the same `t_ms` values already carried by each `speech_rate` point (one per transcript segment/sentence), so a redundant `sentence_boundary` series would just duplicate those timestamps under a second name.
+
+The chart lives on the Source Detail page, not the top-level Project page — a signal series is per-source, and Project Detail lists multiple sources with none selected. See `docs/DECISIONS.md` ("Signals Timeline Chart Lives on Source Detail...").
+
 **Out of scope:** Scoring.
 
 ### T07: Candidate windows · status: todo

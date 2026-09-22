@@ -213,3 +213,30 @@ a {
   border-radius: 4px;
   color: var(--accent);
 }
+
+.signals-timeline {
+  width: 100%;
+  height: auto;
+}
+
+.signals-row-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.signals-baseline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.signals-crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.signals-hover-time {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 4px;
+}

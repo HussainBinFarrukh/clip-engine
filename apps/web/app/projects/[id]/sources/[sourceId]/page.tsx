@@ -1,4 +1,5 @@
 import { JobsPanel } from "../../../../../components/JobsPanel";
+import { SignalsPanel } from "../../../../../components/SignalsPanel";
 import {
   TranscriptPanel,
   VIDEO_PLAYER_ELEMENT_ID,
@@ -7,6 +8,7 @@ import {
   getSource,
   getTranscript,
   listSourceAssets,
+  listSourceSignals,
 } from "../../../../../lib/api";
 import { BROWSER_API_BASE_URL } from "../../../../../lib/browser-api";
 
@@ -18,10 +20,11 @@ export default async function SourceDetailPage({
   params: Promise<{ id: string; sourceId: string }>;
 }) {
   const { id, sourceId } = await params;
-  const [source, assets, transcript] = await Promise.all([
+  const [source, assets, transcript, signals] = await Promise.all([
     getSource(id, sourceId),
     listSourceAssets(id, sourceId),
     getTranscript(sourceId),
+    listSourceSignals(id, sourceId),
   ]);
 
   const videoAsset = assets.find(
@@ -71,6 +74,14 @@ export default async function SourceDetailPage({
           sourceId={sourceId}
           sourceStatus={source.status}
           transcript={transcript}
+        />
+
+        <SignalsPanel
+          projectId={id}
+          sourceId={sourceId}
+          sourceStatus={source.status}
+          durationMs={source.duration_ms}
+          signals={signals}
         />
 
         <JobsPanel projectId={id} sourceId={sourceId} />

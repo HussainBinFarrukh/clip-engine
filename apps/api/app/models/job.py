@@ -15,6 +15,7 @@ class JobStage(str, enum.Enum):
     YOUTUBE_DOWNLOAD = "youtube_download"
     AUDIO_EXTRACT = "audio_extract"
     TRANSCRIBE = "transcribe"
+    SIGNAL_EXTRACTION = "signal_extraction"
 
 
 class JobState(str, enum.Enum):
