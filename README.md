@@ -6,9 +6,9 @@ The build is task-driven. See `TASKS.md` for the ordered execution plan and `AGE
 
 ## Current Task
 
-Current task: T08 LLM provider. Phase 1 (ingest, transcribe) and T06-T07 of Phase 2 are done — see `docs/ROADMAP.md` for the full per-task status and `docs/DECISIONS.md` for the reasoning behind every deviation from `TASKS.md` (none silent).
+Current task: T09 Scoring, ranking, and features. Phase 1 (ingest, transcribe) and T06-T08 of Phase 2 are done — see `docs/ROADMAP.md` for the full per-task status and `docs/DECISIONS.md` for the reasoning behind every deviation from `TASKS.md` (none silent).
 
-Pipeline so far: create a project → add a source (local MP4 upload, or a YouTube URL downloaded server-side via `yt-dlp`; the app does not gate on source rights — see `docs/DECISIONS.md`) → `POST .../transcribe` (faster-whisper, word-level timestamps; one accept check unverified in this sandboxed environment, documented not skipped) → `POST .../extract-signals` (loudness, scene changes, pauses, speech rate, charted on Source Detail) → `app/services/candidate_windows.py` generates sentence-snapped candidate windows per clip preset (pure library code, no endpoint yet — T09 adds scoring and persistence). Every stage after upload runs as an async job the request returns before, processed by the worker; failed jobs are retryable from Source Detail.
+Pipeline so far: create a project → add a source (local MP4 upload, or a YouTube URL downloaded server-side via `yt-dlp`; the app does not gate on source rights — see `docs/DECISIONS.md`) → `POST .../transcribe` (faster-whisper, word-level timestamps; one accept check unverified in this sandboxed environment, documented not skipped) → `POST .../extract-signals` (loudness, scene changes, pauses, speech rate, charted on Source Detail) → `app/services/candidate_windows.py` generates sentence-snapped candidate windows per clip preset. `app/services/llm_provider.py` adds a Gemini-backed `LLMProvider` (structured JSON output, retry-then-clean-failure, every call logged with cost) ready for T09 to call for scoring — both are pure library code so far, no endpoint yet, since persistence/scoring is T09's `ClipCandidate`. Every stage after upload runs as an async job the request returns before, processed by the worker; failed jobs are retryable from Source Detail.
 
 ## Key Docs
 

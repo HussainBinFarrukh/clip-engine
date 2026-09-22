@@ -127,17 +127,19 @@ Pure library code (`app/services/candidate_windows.py`), no DB table or endpoint
 
 **Out of scope:** LLM calls.
 
-### T08: LLM provider · status: todo
+### T08: LLM provider · status: done
 **Build:**
 - `LLMProvider` interface, with one hosted adapter and an optional Ollama adapter.
 - Prompts versioned in files.
 - JSON output validated by Pydantic, with retry on invalid output.
 - Token and cost logging per call.
 
+Hosted adapter targets Gemini, at explicit product direction (intent to add OpenAI later; Ollama skipped as it wasn't requested — both are one new `LLMProvider` subclass away, no changes needed elsewhere). See `docs/DECISIONS.md`.
+
 **Accept:**
-- Swapping the adapter via an environment variable works.
-- Invalid JSON triggers a retry and then a clean failure.
-- The cost of each call is recorded.
+- Swapping the adapter via an environment variable works. Verified (`get_llm_provider()` keyed on `LLM_PROVIDER`).
+- Invalid JSON triggers a retry and then a clean failure. Verified deterministically with a scripted fake provider (real LLM output isn't reliably invalid on demand).
+- The cost of each call is recorded. Verified — every call, successful or not, gets one `AIAnalysis` row with real token counts and cost; also verified against a real Gemini API call, not just the fake provider.
 
 **Out of scope:** Clip logic.
 

@@ -29,6 +29,9 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
       REDIS_URL: redis://redis:6379/0
@@ -51,6 +54,9 @@ services:
     build:
       context: .
       dockerfile: workers/Dockerfile
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://clip_engine:clip_engine@postgres:5432/clip_engine
       REDIS_URL: redis://redis:6379/0

@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     storage_root: str = "storage"
     max_upload_bytes: int = 500 * 1024 * 1024
+    llm_provider: str = "gemini"
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.6-flash"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -169,7 +169,31 @@ Phase 1 adapter: `FasterWhisperTranscriber`, word timestamps always on. Uses `la
 
 ### LLMProvider
 
-Defined but unused in Phase 1. Candidate scoring starts in Phase 2.
+- `generate(prompt: str) -> (text, LLMUsage)` — one raw call, returning usage/cost alongside the text.
+- `generate_structured(provider, prompt, schema, max_retries)` — provider-agnostic: parses/validates the response as JSON against a Pydantic schema, retrying with a correction message on invalid output, up to `max_retries` times. Never raises itself; returns a `StructuredCallResult` with `.success`.
+- `run_llm_call(db, provider, prompt_name, prompt_version, prompt, schema, source_video_id=None)` — DB-aware wrapper: calls `generate_structured`, records one `AIAnalysis` row regardless of outcome (a failed call still cost tokens), then raises `LLMStructuredOutputError` on failure.
+
+T08 adapter: `GeminiProvider` (Gemini API over plain HTTP via `requests`, no SDK dependency), selected by `LLM_PROVIDER=gemini` (the only implemented value so far; `get_llm_provider()` is where a future `openai` branch goes). Model via `GEMINI_MODEL` (default `gemini-3.6-flash`), key via `GEMINI_API_KEY`. Extended "thinking" is disabled per call (`thinkingConfig.thinkingBudget: 0`) — cheaper and faster for structured-output tasks that don't need deep reasoning; a trivial prompt cost 52 thought tokens with the default budget and 0 with it disabled. Per-token pricing is a placeholder (see `docs/DECISIONS.md`) pending verification against current Google AI pricing.
+
+Prompts are files, not inline strings: `app/services/prompts.py` loads `app/prompts/{name}/v{version}.txt`, so a prompt change is a diffable, reviewable change with its own version number recorded on every `AIAnalysis` row it produces. T08 ships one demo prompt (`structured_demo/v1`) that exists only to exercise this infrastructure end-to-end; real clip-scoring prompts are T09's job ("Out of scope: Clip logic" in TASKS.md's T08 entry).
+
+### ai_analyses
+
+- `id`: UUID primary key
+- `source_video_id`: nullable foreign key to `source_videos` (null until a call is tied to a specific source, e.g. clip scoring in T09)
+- `provider`: text (`gemini`)
+- `model`: text
+- `prompt_name`: text
+- `prompt_version`: integer
+- `attempts`: integer
+- `input_tokens`, `output_tokens`: integer
+- `cost_usd`: float
+- `success`: boolean
+- `error_message`: nullable text
+- `raw_response`: nullable text (truncated to 5000 chars)
+- `created_at`: timestamp
+
+One row per LLM call attempt sequence (all retries counted as one row, `attempts` records how many), successful or not.
 
 ### SourceProvider
 
